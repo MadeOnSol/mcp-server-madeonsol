@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-madeonsol",
-  "version": "0.2.1",
+  "version": "1.7.4",
   "mcpName": "io.github.lambopoewert/madeonsol",
   "description": "MCP server for MadeOnSol Solana KOL intelligence API — use from Claude, Cursor, or any MCP client",
   "type": "module",
@@ -8,12 +8,40 @@
     "mcp-server-madeonsol": "dist/index.js"
   },
   "main": "dist/index.js",
-  "files": ["dist", "README.md", "LICENSE", "glama.json"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "glama.json"
+  ],
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": ""
+    "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "solana", "x402", "kol", "trading", "claude", "cursor"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "solana",
+    "x402",
+    "kol",
+    "kol-tracker",
+    "trading",
+    "claude",
+    "claude-desktop",
+    "cursor",
+    "windsurf",
+    "ai-agent",
+    "memecoin",
+    "memecoin-tracker",
+    "pumpfun",
+    "deployer-hunter",
+    "alpha",
+    "alpha-bot",
+    "smart-money",
+    "copy-trading",
+    "madeonsol"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

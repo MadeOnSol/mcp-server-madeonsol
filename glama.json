@@ -1,54 +1,49 @@
 {
   "name": "mcp-server-madeonsol",
   "display_name": "MadeOnSol",
-  "description": "Solana KOL trading intelligence and deployer analytics. Real-time data from 950+ KOL wallets and 6,700+ Pump.fun deployers. Supports free API key, RapidAPI, or x402 micropayments.",
-  "version": "0.3.0",
+  "description": "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, server-side copy-trade rules, and wallet tracker. Supports free MadeOnSol API key (msk_) or x402 micropayments.",
+  "version": "1.0.0",
   "homepage": "https://madeonsol.com/solana-api",
   "repository": "https://github.com/LamboPoewert/mcp-server-madeonsol",
   "license": "MIT",
   "categories": ["blockchain", "finance", "web3"],
-  "tags": ["solana", "kol", "trading", "x402", "micropayments", "defi", "api", "deployer", "pump-fun"],
+  "tags": ["solana", "kol", "trading", "x402", "micropayments", "defi", "api", "deployer", "pump-fun", "copy-trade"],
   "tools": [
-    {
-      "name": "madeonsol_kol_feed",
-      "description": "Get real-time Solana KOL trades from 950+ tracked wallets."
-    },
-    {
-      "name": "madeonsol_kol_coordination",
-      "description": "Get KOL convergence signals — tokens multiple KOLs are accumulating."
-    },
-    {
-      "name": "madeonsol_kol_leaderboard",
-      "description": "Get KOL performance rankings by PnL and win rate."
-    },
-    {
-      "name": "madeonsol_deployer_alerts",
-      "description": "Get elite Pump.fun deployer alerts with KOL enrichment."
-    },
-    {
-      "name": "madeonsol_discovery",
-      "description": "List all available endpoints with prices. Free, no auth required."
-    },
-    {
-      "name": "madeonsol_create_webhook",
-      "description": "Register a webhook for real-time push notifications. Pro/Ultra."
-    },
-    {
-      "name": "madeonsol_list_webhooks",
-      "description": "List your registered webhooks. Pro/Ultra."
-    },
-    {
-      "name": "madeonsol_delete_webhook",
-      "description": "Delete a webhook by ID. Pro/Ultra."
-    },
-    {
-      "name": "madeonsol_test_webhook",
-      "description": "Send a test payload to verify a webhook. Pro/Ultra."
-    },
-    {
-      "name": "madeonsol_stream_token",
-      "description": "Get a 24h WebSocket streaming token. Pro/Ultra."
-    }
+    { "name": "madeonsol_kol_feed", "description": "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
+    { "name": "madeonsol_kol_coordination", "description": "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
+    { "name": "madeonsol_kol_leaderboard", "description": "Get KOL performance rankings by PnL and win rate." },
+    { "name": "madeonsol_deployer_alerts", "description": "Get Pump.fun deployer alerts with KOL enrichment." },
+    { "name": "madeonsol_kol_pairs", "description": "KOL affinity matrix — which KOLs co-trade the same tokens." },
+    { "name": "madeonsol_kol_timing", "description": "KOL entry/exit timing profile. Pro/Ultra." },
+    { "name": "madeonsol_deployer_trajectory", "description": "Deployer skill curve — streaks, trend. Pro/Ultra." },
+    { "name": "madeonsol_kol_hot_tokens", "description": "KOL momentum tokens — accelerating buy interest." },
+    { "name": "madeonsol_kol_pnl", "description": "Deep per-wallet PnL: equity curve, risk metrics, positions." },
+    { "name": "madeonsol_kol_trending_tokens", "description": "Tokens ranked by KOL buy volume (5m–12h windows)." },
+    { "name": "madeonsol_kol_token_entry_order", "description": "Ranked KOL first-buyers for a specific token." },
+    { "name": "madeonsol_kol_compare_wallets", "description": "Side-by-side comparison of 2-5 KOL wallets (overlap in PRO+)." },
+    { "name": "madeonsol_kol_alerts_recent", "description": "Unified live KOL alert feed: clusters, fresh buys, heating-up." },
+    { "name": "madeonsol_discovery", "description": "List all available endpoints with prices. Free, no auth required." },
+    { "name": "madeonsol_create_webhook", "description": "Register a webhook for real-time push notifications. Pro/Ultra." },
+    { "name": "madeonsol_list_webhooks", "description": "List your registered webhooks. Pro/Ultra." },
+    { "name": "madeonsol_delete_webhook", "description": "Delete a webhook by ID. Pro/Ultra." },
+    { "name": "madeonsol_test_webhook", "description": "Send a test payload to verify a webhook. Pro/Ultra." },
+    { "name": "madeonsol_stream_token", "description": "Get a 24h WebSocket streaming token. Pro/Ultra." },
+    { "name": "madeonsol_wallet_tracker_watchlist", "description": "List your tracked wallets and remaining capacity." },
+    { "name": "madeonsol_wallet_tracker_add", "description": "Add a wallet to your watchlist." },
+    { "name": "madeonsol_wallet_tracker_remove", "description": "Remove a wallet from your watchlist." },
+    { "name": "madeonsol_wallet_tracker_trades", "description": "Historical swap/transfer events for watched wallets." },
+    { "name": "madeonsol_wallet_tracker_summary", "description": "Per-wallet stats: swap counts, SOL bought/sold." },
+    { "name": "madeonsol_alpha_leaderboard", "description": "Top profitable early-buyer wallets — 47,000+ scored. BASIC=25, PRO=100, ULTRA=500." },
+    { "name": "madeonsol_alpha_wallet", "description": "Full alpha profile + bot signals for one wallet. ULTRA only." },
+    { "name": "madeonsol_alpha_linked", "description": "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
+    { "name": "madeonsol_token_cap_table", "description": "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
+    { "name": "madeonsol_token_buyer_quality", "description": "0–100 buyer quality score for a token's first-buyer cohort." },
+    { "name": "madeonsol_copytrade_list", "description": "List your copy-trade rules. PRO/ULTRA." },
+    { "name": "madeonsol_copytrade_create", "description": "Create a copy-trade rule with webhook + WS delivery. PRO/ULTRA." },
+    { "name": "madeonsol_copytrade_get", "description": "Get one copy-trade rule. PRO/ULTRA." },
+    { "name": "madeonsol_copytrade_update", "description": "Update a copy-trade rule. PRO/ULTRA." },
+    { "name": "madeonsol_copytrade_delete", "description": "Delete a copy-trade rule. PRO/ULTRA." },
+    { "name": "madeonsol_copytrade_signals", "description": "Recent fired copy-trade signals (up to 7 days). PRO/ULTRA." }
   ],
   "transports": ["stdio", "http"],
   "runtime": "node"
