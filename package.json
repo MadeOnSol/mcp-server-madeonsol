@@ -48,7 +48,8 @@
     "url": "https://github.com/LamboPoewert/mcp-server-madeonsol"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^4.3.6"
   },
   "peerDependencies": {
     "@x402/fetch": ">=0.1.0",
@@ -58,6 +59,7 @@
     "@scure/base": ">=1.0.0"
   },
   "devDependencies": {
+    "@types/node": "^20",
     "typescript": "^5"
   }
 }
