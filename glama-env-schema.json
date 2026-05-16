@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "description": "Provide either MADEONSOL_API_KEY (recommended, free tier 200 req/day at https://madeonsol.com/pricing) OR SVM_PRIVATE_KEY (pay-per-call via x402). At least one is required at runtime.",
+  "properties": {
+    "MADEONSOL_API_KEY": {
+      "type": "string",
+      "title": "MadeOnSol API key (recommended)",
+      "description": "Your MadeOnSol API key, starts with msk_. Free tier (200 req/day, no card) at https://madeonsol.com/pricing. Unlocks KOL feed, deployer alerts, alpha-wallet intel, multi-KOL coordination, first-touch scout signal, copy-trade rules, and the DEX firehose (ULTRA)."
+    },
+    "SVM_PRIVATE_KEY": {
+      "type": "string",
+      "title": "Solana wallet private key (x402 alternative)",
+      "description": "Base58-encoded Solana private key for pay-per-call via x402 micropayments. Use this if you would rather not sign up - the server autopays per request from this wallet. Only needed when MADEONSOL_API_KEY is not set."
+    },
+    "MADEONSOL_API_URL": {
+      "type": "string",
+      "default": "https://madeonsol.com",
+      "description": "MadeOnSol API base URL (defaults to https://madeonsol.com)."
+    }
+  }
+}
