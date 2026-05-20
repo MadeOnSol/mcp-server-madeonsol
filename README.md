@@ -3,10 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/mcp-server-madeonsol?style=flat-square)](https://www.npmjs.com/package/mcp-server-madeonsol)
 [![npm downloads](https://img.shields.io/npm/dm/mcp-server-madeonsol?style=flat-square)](https://www.npmjs.com/package/mcp-server-madeonsol)
 [![Smithery](https://img.shields.io/badge/Smithery-listed-blueviolet?style=flat-square)](https://smithery.ai/servers/madeonsol/solana-kol-intelligence)
+[![Glama](https://glama.ai/mcp/servers/LamboPoewert/mcp-server-madeonsol/badges/score.svg)](https://glama.ai/mcp/servers/LamboPoewert/mcp-server-madeonsol)
 [![MCP](https://img.shields.io/badge/MCP-compatible-blueviolet?style=flat-square)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-> ⚡ **[Install via Smithery](#install-via-smithery-one-line)** · 🤖 **[Use in Claude Desktop](#claude-desktop)** · 🖱️ **[Use in Cursor](#cursor)** · 📚 **[API docs](https://madeonsol.com/api-docs)** · 💰 **[Free API key](https://madeonsol.com/pricing)**
+> ⚡ **[Install via Smithery](#install-via-smithery-one-line)** · 🤖 **[Use in Claude Desktop](#claude-desktop)** · 🖱️ **[Use in Cursor](#cursor)** · 📚 **[API docs](https://madeonsol.com/api-docs)** · 💰 **[Free API key](https://madeonsol.com/pricing)** · 🔎 **[On Glama](https://glama.ai/mcp/servers/LamboPoewert/mcp-server-madeonsol)**
 
 MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. Use from Claude Desktop, Cursor, or any MCP-compatible client.
 
@@ -118,6 +119,17 @@ Add to MCP settings with the same command and env vars.
 | `madeonsol_wallet_tracker_remove` | Remove a wallet from your watchlist |
 | `madeonsol_wallet_tracker_trades` | Historical swap/transfer events for watched wallets (120-day retention) |
 | `madeonsol_wallet_tracker_summary` | Per-wallet stats: swap counts, SOL bought/sold, last event |
+
+### Universal Wallet *(new in 1.8 — any wallet, not just curated KOLs, PRO+)*
+
+| Tool | Description |
+|---|---|
+| `madeonsol_wallet_stats` | Aggregate 90d stats + cross-product flags (is_kol, is_alpha_tracked + bot_confidence + win_rate + net_pnl, is_deployer + tokens_deployed) — quick sizing-up of an unknown wallet |
+| `madeonsol_wallet_pnl` | Full FIFO cost-basis PnL: realized + unrealized SOL, profit factor, max drawdown, avg + median hold minutes, daily UTC PnL curve, closed + open positions hydrated with live mc-tracker prices |
+| `madeonsol_wallet_positions` | Open positions only — lighter slice of /pnl. Shares the same cache. |
+| `madeonsol_wallet_trades` | Cursor-paginated raw trades with action / token / since-until filters |
+
+Cached server-side with dynamic TTL (5min / 1h / 24h based on last activity). Cost basis observable only inside the 90-day window.
 
 ### Alpha Wallet Intelligence
 

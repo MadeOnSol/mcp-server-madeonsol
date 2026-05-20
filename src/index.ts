@@ -438,7 +438,85 @@ function registerTools(server: McpServer) {
         }
       );
 
+      // ── Universal wallet endpoints (PRO+, any wallet — not just curated KOLs) ──
+
+      server.tool(
+        "madeonsol_wallet_stats",
+        "Aggregate stats for any Solana wallet over the last 90 days plus cross-product flags (is_kol, is_alpha_tracked with bot_confidence + win_rate + net_pnl, is_deployer with tokens_deployed + bonding_rate). Use this before drilling into PnL to size up an unknown wallet quickly. PRO+.",
+        {
+          address: z.string().describe("Solana wallet address (base58)"),
+        },
+        { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        async ({ address }) => {
+          const res = await fetch(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}`, {
+            headers: { "Content-Type": "application/json", ...apiKeyHeaders() },
+          });
+          const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+          return { content: [{ type: "text" as const, text }] };
+        }
+      );
+
+      server.tool(
+        "madeonsol_wallet_pnl",
+        "Full FIFO cost-basis PnL for any wallet: realized + unrealized SOL, profit factor, max drawdown, avg + median hold minutes, daily UTC PnL curve, closed positions sorted by pnl desc (with ROI %, hold time, win/loss), and open positions hydrated with live current prices from the market-cap tracker. Cached with dynamic TTL (5min active / 1h recent / 24h dormant). Cache hits don't count against your daily quota. Cost basis only observable inside the 90-day data window — overflow sells are silently discarded rather than fabricated. PRO+.",
+        {
+          address: z.string().describe("Solana wallet address (base58)"),
+        },
+        { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        async ({ address }) => {
+          const res = await fetch(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}/pnl`, {
+            headers: { "Content-Type": "application/json", ...apiKeyHeaders() },
+          });
+          const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+          return { content: [{ type: "text" as const, text }] };
+        }
+      );
+
+      server.tool(
+        "madeonsol_wallet_positions",
+        "Open positions only for any wallet — lighter slice of madeonsol_wallet_pnl for use cases that don't need the full PnL summary or curve. Each position: token_mint, token_amount, cost_basis_sol, avg_entry_price_sol, current_price_sol (live from mc-tracker; null if delisted), current_value_sol, unrealized_sol, unrealized_pct, first_buy_at. Shares the /pnl cache. PRO+.",
+        {
+          address: z.string().describe("Solana wallet address (base58)"),
+        },
+        { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        async ({ address }) => {
+          const res = await fetch(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}/positions`, {
+            headers: { "Content-Type": "application/json", ...apiKeyHeaders() },
+          });
+          const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+          return { content: [{ type: "text" as const, text }] };
+        }
+      );
+
+      server.tool(
+        "madeonsol_wallet_trades",
+        "Cursor-paginated raw trades for any wallet. Filter by action (buy/sell), specific token_mint, time window via since/until (Unix seconds; default last 90 days). Cursor encodes (block_time, id) for stable DESC pagination — pass next_cursor from the previous response to fetch older trades. Limit 1-500 (default 100). PRO+.",
+        {
+          address: z.string().describe("Solana wallet address (base58)"),
+          limit: z.number().min(1).max(500).default(100).describe("Trades per page (1-500)"),
+          cursor: z.string().optional().describe("Cursor from previous response's next_cursor field"),
+          action: z.enum(["buy", "sell"]).optional().describe("Filter to buys or sells only"),
+          token_mint: z.string().optional().describe("Filter to a single token mint"),
+          since: z.number().optional().describe("Unix epoch seconds — default now-90d"),
+          until: z.number().optional().describe("Unix epoch seconds — default now"),
+        },
+        { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        async ({ address, limit, cursor, action, token_mint, since, until }) => {
+          const url = new URL(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}/trades`);
+          url.searchParams.set("limit", String(limit));
+          if (cursor)     url.searchParams.set("cursor", cursor);
+          if (action)     url.searchParams.set("action", action);
+          if (token_mint) url.searchParams.set("token_mint", token_mint);
+          if (since !== undefined) url.searchParams.set("since", String(since));
+          if (until !== undefined) url.searchParams.set("until", String(until));
+          const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+          const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+          return { content: [{ type: "text" as const, text }] };
+        }
+      );
+
       console.error("[madeonsol-mcp] Wallet tracker tools enabled");
+      console.error("[madeonsol-mcp] Universal wallet tools enabled (stats / pnl / positions / trades)");
     } else {
       console.error("[madeonsol-mcp] Wallet tracker tools disabled (requires MADEONSOL_API_KEY)");
     }
@@ -1022,7 +1100,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.7.0",
+          version: "1.8.0",
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1050,6 +1128,10 @@ async function main() {
             { name: "madeonsol_wallet_tracker_remove", description: "Remove a wallet from your watchlist." },
             { name: "madeonsol_wallet_tracker_trades", description: "Historical swap/transfer events for watched wallets." },
             { name: "madeonsol_wallet_tracker_summary", description: "Per-wallet stats: swap counts, SOL bought/sold." },
+            { name: "madeonsol_wallet_stats", description: "Aggregate stats + cross-product flags (is_kol/alpha/deployer) for any Solana wallet. PRO+." },
+            { name: "madeonsol_wallet_pnl", description: "Full FIFO cost-basis PnL for any wallet: realized + unrealized, profit factor, drawdown, daily curve, closed + open positions. PRO+." },
+            { name: "madeonsol_wallet_positions", description: "Open positions only for any wallet — lighter slice of /pnl. Live unrealized SOL from mc-tracker. PRO+." },
+            { name: "madeonsol_wallet_trades", description: "Cursor-paginated raw trades for any wallet. Filter by action / token_mint / time window. PRO+." },
             { name: "madeonsol_alpha_leaderboard", description: "Top profitable early-buyer wallets — 47,000+ scored. BASIC=25, PRO=100, ULTRA=500." },
             { name: "madeonsol_alpha_wallet", description: "Full alpha profile + bot signals for one wallet. ULTRA only." },
             { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
@@ -1092,7 +1174,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.7.0" });
+            const server = new McpServer({ name: "madeonsol", version: "1.8.0" });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1134,7 +1216,7 @@ async function main() {
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: "1.7.0" });
+    const server = new McpServer({ name: "madeonsol", version: "1.8.0" });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);
