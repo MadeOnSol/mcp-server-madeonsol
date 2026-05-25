@@ -191,6 +191,31 @@ Every "first KOL buy on a token mint" event. Filterable by **scout tier** (S/A/B
 
 > **Don't poll — push.** Median lead time before the second KOL is 12 seconds. WebSocket channel: `kol:first_touches` (PRO+).
 
+### Price Alerts *(new in 1.9)*
+
+CRUD for token dip/recovery price alerts. Fires when a token's market cap crosses your threshold. PRO=5 rules, ULTRA=25.
+
+| Tool | Description |
+|---|---|
+| `madeonsol_price_alerts_list` | List your price alert rules |
+| `madeonsol_price_alerts_create` | Create a dip/recovery alert. Returns `webhook_secret` once — store it |
+| `madeonsol_price_alerts_get` | Get one alert rule by ID |
+| `madeonsol_price_alerts_update` | Update fields or toggle `is_active` |
+| `madeonsol_price_alerts_delete` | Delete permanently |
+
+### Scout Leaderboard & KOL Consensus *(new in 1.9)*
+
+| Tool | Tier | Description |
+|---|---|---|
+| `madeonsol_scout_leaderboard` | PRO+ | Top scout-tier KOLs ranked by first-touch follow-on rate, win rate, and ROI |
+| `madeonsol_kol_consensus` | PRO+ | Tokens with the strongest KOL agreement signal — weighted by scout score and recent PnL |
+| `madeonsol_peak_history` | PRO+ | Historical peak-density windows for a token — every coordination spike with KOL breakdown |
+| `madeonsol_coordination_history` | PRO+ | Global coordination event log with token, KOL count, score, and outcome |
+
+### Wallet Derived Stats *(new in 1.9)*
+
+`madeonsol_wallet_stats` now returns a `stats` object with derived fields: `win_rate` (0-1), `roi`, `verdict` ("strong" | "profitable" | "neutral" | "losing"), and `biggest_miss` (token with the highest post-exit gain the wallet missed).
+
 ### Streaming & Webhooks
 
 | Tool | Description |
