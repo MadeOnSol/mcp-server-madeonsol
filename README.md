@@ -110,6 +110,15 @@ Add to MCP settings with the same command and env vars.
 | `madeonsol_deployer_alerts` | Pump.fun deployer launches with KOL enrichment. Filter by tier (elite/good/moderate/rising/cold). ULTRA unlocks full pagination. |
 | `madeonsol_deployer_trajectory` | Deployer skill curve — streaks, rolling bond rate, trend — available on all tiers |
 
+### Deshred Sniper Alerts *(new in 1.10 — Pro/Ultra)*
+
+Pre-confirm pump.fun deploy feed reconstructed from shred-level (**deshred**) data — launches surface **~500ms before they confirm on-chain**. Pro sees elite/good deployers; Ultra sees every tier.
+
+| Tool | Description |
+|---|---|
+| `madeonsol_sniper_recent` | Newest-first deshred deploy feed. Pro: elite/good · Ultra: all tiers. `watchlist: true` (Ultra) narrows to your custom deployer watchlist |
+| `madeonsol_sniper_by_deployer` | Deshred deploys for a single deployer wallet (Ultra) |
+
 ### Wallet Tracker
 
 | Tool | Description |

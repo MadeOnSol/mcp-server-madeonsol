@@ -18,11 +18,14 @@ type AuthMode = "madeonsol" | "x402" | "none";
 let authMode: AuthMode = "none";
 let paidFetch: typeof fetch = fetch;
 
+const UA = "mcp-server-madeonsol/1.10.0";
+
 function apiKeyHeaders(): Record<string, string> {
+  const h: Record<string, string> = { "User-Agent": UA };
   if (authMode === "madeonsol") {
-    return { Authorization: `Bearer ${MADEONSOL_API_KEY}` };
+    h.Authorization = `Bearer ${MADEONSOL_API_KEY}`;
   }
-  return {};
+  return h;
 }
 
 async function initAuth() {
@@ -326,6 +329,46 @@ function registerTools(server: McpServer) {
     async ({ period, min_kols, limit }) => ({
       content: [{ type: "text" as const, text: await query("/api/x402/kol/tokens/trending", { period, min_kols, limit }) }],
     })
+  );
+
+  server.tool(
+    "madeonsol_sniper_recent",
+    "Deshred pre-confirm pump.fun deploy feed — new launches surface ~500ms before they confirm on-chain (reconstructed from shred-level data). PRO sees elite/good deployers; ULTRA sees every tier. Requires a Pro/Ultra msk_ API key.",
+    {
+      deployer_tier: z.enum(["elite", "good", "moderate", "rising", "cold", "unranked"]).optional().describe("Filter by deployer reputation tier (ULTRA)"),
+      min_bond_rate: z.number().min(0).max(1).optional().describe("Minimum deployer lifetime bond rate (0-1)"),
+      since: z.string().optional().describe("ISO-8601 — only deploys detected after this timestamp"),
+      watchlist: z.boolean().optional().describe("ULTRA: narrow to your custom deployer watchlist (any tier)"),
+      limit: z.number().min(1).max(200).default(50).describe("Max results"),
+    },
+    readOnlyAnnotations,
+    async ({ deployer_tier, min_bond_rate, since, watchlist, limit }) => {
+      if (authMode !== "madeonsol") return { content: [{ type: "text" as const, text: "Sniper feed requires MADEONSOL_API_KEY (msk_, Pro/Ultra) — get one at madeonsol.com/pricing." }] };
+      const qs = new URLSearchParams({ limit: String(limit) });
+      if (deployer_tier) qs.set("deployer_tier", deployer_tier);
+      if (min_bond_rate != null) qs.set("min_bond_rate", String(min_bond_rate));
+      if (since) qs.set("since", since);
+      if (watchlist) qs.set("watchlist", "true");
+      const res = await fetch(`${BASE_URL}/api/v1/sniper/recent?${qs}`, { headers: apiKeyHeaders() });
+      if (!res.ok) { const body = await res.text().catch(() => ""); return { content: [{ type: "text" as const, text: `Error ${res.status}: ${body}` }] }; }
+      return { content: [{ type: "text" as const, text: JSON.stringify(await res.json(), null, 2) }] };
+    }
+  );
+
+  server.tool(
+    "madeonsol_sniper_by_deployer",
+    "Deshred pre-confirm deploys filtered to a single deployer wallet — audit a deployer's recent launches before tracking them. ULTRA only.",
+    {
+      wallet: z.string().describe("Deployer wallet address (base58)"),
+      limit: z.number().min(1).max(200).default(50).describe("Max results"),
+    },
+    readOnlyAnnotations,
+    async ({ wallet, limit }) => {
+      if (authMode !== "madeonsol") return { content: [{ type: "text" as const, text: "Sniper feed requires MADEONSOL_API_KEY (msk_, Ultra)." }] };
+      const res = await fetch(`${BASE_URL}/api/v1/sniper/by-deployer/${encodeURIComponent(wallet)}?limit=${limit}`, { headers: apiKeyHeaders() });
+      if (!res.ok) { const body = await res.text().catch(() => ""); return { content: [{ type: "text" as const, text: `Error ${res.status}: ${body}` }] }; }
+      return { content: [{ type: "text" as const, text: JSON.stringify(await res.json(), null, 2) }] };
+    }
   );
 
   server.tool(
@@ -1256,7 +1299,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.9.0",
+          version: "1.10.0",
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1340,7 +1383,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.9.0" });
+            const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1382,7 +1425,7 @@ async function main() {
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: "1.9.0" });
+    const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);

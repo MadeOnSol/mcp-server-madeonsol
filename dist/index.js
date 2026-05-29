@@ -11,11 +11,13 @@ const PORT = parseInt(process.env.PORT || "3100", 10);
 const MODE = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "http"
 let authMode = "none";
 let paidFetch = fetch;
+const UA = "mcp-server-madeonsol/1.10.0";
 function apiKeyHeaders() {
+    const h = { "User-Agent": UA };
     if (authMode === "madeonsol") {
-        return { Authorization: `Bearer ${MADEONSOL_API_KEY}` };
+        h.Authorization = `Bearer ${MADEONSOL_API_KEY}`;
     }
-    return {};
+    return h;
 }
 async function initAuth() {
     if (MADEONSOL_API_KEY) {
@@ -260,6 +262,44 @@ function registerTools(server) {
     }, readOnlyAnnotations, async ({ period, min_kols, limit }) => ({
         content: [{ type: "text", text: await query("/api/x402/kol/tokens/trending", { period, min_kols, limit }) }],
     }));
+    server.tool("madeonsol_sniper_recent", "Deshred pre-confirm pump.fun deploy feed — new launches surface ~500ms before they confirm on-chain (reconstructed from shred-level data). PRO sees elite/good deployers; ULTRA sees every tier. Requires a Pro/Ultra msk_ API key.", {
+        deployer_tier: z.enum(["elite", "good", "moderate", "rising", "cold", "unranked"]).optional().describe("Filter by deployer reputation tier (ULTRA)"),
+        min_bond_rate: z.number().min(0).max(1).optional().describe("Minimum deployer lifetime bond rate (0-1)"),
+        since: z.string().optional().describe("ISO-8601 — only deploys detected after this timestamp"),
+        watchlist: z.boolean().optional().describe("ULTRA: narrow to your custom deployer watchlist (any tier)"),
+        limit: z.number().min(1).max(200).default(50).describe("Max results"),
+    }, readOnlyAnnotations, async ({ deployer_tier, min_bond_rate, since, watchlist, limit }) => {
+        if (authMode !== "madeonsol")
+            return { content: [{ type: "text", text: "Sniper feed requires MADEONSOL_API_KEY (msk_, Pro/Ultra) — get one at madeonsol.com/pricing." }] };
+        const qs = new URLSearchParams({ limit: String(limit) });
+        if (deployer_tier)
+            qs.set("deployer_tier", deployer_tier);
+        if (min_bond_rate != null)
+            qs.set("min_bond_rate", String(min_bond_rate));
+        if (since)
+            qs.set("since", since);
+        if (watchlist)
+            qs.set("watchlist", "true");
+        const res = await fetch(`${BASE_URL}/api/v1/sniper/recent?${qs}`, { headers: apiKeyHeaders() });
+        if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            return { content: [{ type: "text", text: `Error ${res.status}: ${body}` }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify(await res.json(), null, 2) }] };
+    });
+    server.tool("madeonsol_sniper_by_deployer", "Deshred pre-confirm deploys filtered to a single deployer wallet — audit a deployer's recent launches before tracking them. ULTRA only.", {
+        wallet: z.string().describe("Deployer wallet address (base58)"),
+        limit: z.number().min(1).max(200).default(50).describe("Max results"),
+    }, readOnlyAnnotations, async ({ wallet, limit }) => {
+        if (authMode !== "madeonsol")
+            return { content: [{ type: "text", text: "Sniper feed requires MADEONSOL_API_KEY (msk_, Ultra)." }] };
+        const res = await fetch(`${BASE_URL}/api/v1/sniper/by-deployer/${encodeURIComponent(wallet)}?limit=${limit}`, { headers: apiKeyHeaders() });
+        if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            return { content: [{ type: "text", text: `Error ${res.status}: ${body}` }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify(await res.json(), null, 2) }] };
+    });
     server.tool("madeonsol_discovery", "List all available MadeOnSol API endpoints with prices and parameter docs. Free, no auth required.", {}, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, async () => {
         const res = await fetch(new URL("/api/x402", BASE_URL).toString());
         const data = await res.json();
@@ -334,7 +374,61 @@ function registerTools(server) {
                 const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
                 return { content: [{ type: "text", text }] };
             });
+            // ── Universal wallet endpoints (PRO+, any wallet — not just curated KOLs) ──
+            server.tool("madeonsol_wallet_stats", "Aggregate stats for any Solana wallet over the last 90 days plus cross-product flags (is_kol, is_alpha_tracked with bot_confidence + win_rate + net_pnl, is_deployer with tokens_deployed + bonding_rate). Use this before drilling into PnL to size up an unknown wallet quickly. PRO+.", {
+                address: z.string().describe("Solana wallet address (base58)"),
+            }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ address }) => {
+                const res = await fetch(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}`, {
+                    headers: { "Content-Type": "application/json", ...apiKeyHeaders() },
+                });
+                const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+                return { content: [{ type: "text", text }] };
+            });
+            server.tool("madeonsol_wallet_pnl", "Full FIFO cost-basis PnL for any wallet: realized + unrealized SOL, profit factor, max drawdown, avg + median hold minutes, daily UTC PnL curve, closed positions sorted by pnl desc (with ROI %, hold time, win/loss), and open positions hydrated with live current prices from the market-cap tracker. Cached with dynamic TTL (5min active / 1h recent / 24h dormant). Cache hits don't count against your daily quota. Cost basis only observable inside the 90-day data window — overflow sells are silently discarded rather than fabricated. PRO+.", {
+                address: z.string().describe("Solana wallet address (base58)"),
+            }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ address }) => {
+                const res = await fetch(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}/pnl`, {
+                    headers: { "Content-Type": "application/json", ...apiKeyHeaders() },
+                });
+                const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+                return { content: [{ type: "text", text }] };
+            });
+            server.tool("madeonsol_wallet_positions", "Open positions only for any wallet — lighter slice of madeonsol_wallet_pnl for use cases that don't need the full PnL summary or curve. Each position: token_mint, token_amount, cost_basis_sol, avg_entry_price_sol, current_price_sol (live from mc-tracker; null if delisted), current_value_sol, unrealized_sol, unrealized_pct, first_buy_at. Shares the /pnl cache. PRO+.", {
+                address: z.string().describe("Solana wallet address (base58)"),
+            }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ address }) => {
+                const res = await fetch(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}/positions`, {
+                    headers: { "Content-Type": "application/json", ...apiKeyHeaders() },
+                });
+                const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+                return { content: [{ type: "text", text }] };
+            });
+            server.tool("madeonsol_wallet_trades", "Cursor-paginated raw trades for any wallet. Filter by action (buy/sell), specific token_mint, time window via since/until (Unix seconds; default last 90 days). Cursor encodes (block_time, id) for stable DESC pagination — pass next_cursor from the previous response to fetch older trades. Limit 1-500 (default 100). PRO+.", {
+                address: z.string().describe("Solana wallet address (base58)"),
+                limit: z.number().min(1).max(500).default(100).describe("Trades per page (1-500)"),
+                cursor: z.string().optional().describe("Cursor from previous response's next_cursor field"),
+                action: z.enum(["buy", "sell"]).optional().describe("Filter to buys or sells only"),
+                token_mint: z.string().optional().describe("Filter to a single token mint"),
+                since: z.number().optional().describe("Unix epoch seconds — default now-90d"),
+                until: z.number().optional().describe("Unix epoch seconds — default now"),
+            }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ address, limit, cursor, action, token_mint, since, until }) => {
+                const url = new URL(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}/trades`);
+                url.searchParams.set("limit", String(limit));
+                if (cursor)
+                    url.searchParams.set("cursor", cursor);
+                if (action)
+                    url.searchParams.set("action", action);
+                if (token_mint)
+                    url.searchParams.set("token_mint", token_mint);
+                if (since !== undefined)
+                    url.searchParams.set("since", String(since));
+                if (until !== undefined)
+                    url.searchParams.set("until", String(until));
+                const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+                const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+                return { content: [{ type: "text", text }] };
+            });
             console.error("[madeonsol-mcp] Wallet tracker tools enabled");
+            console.error("[madeonsol-mcp] Universal wallet tools enabled (stats / pnl / positions / trades)");
         }
         else {
             console.error("[madeonsol-mcp] Wallet tracker tools disabled (requires MADEONSOL_API_KEY)");
@@ -637,6 +731,97 @@ function registerTools(server) {
         server.tool("madeonsol_first_touch_subscriptions_delete", "Delete a first-touch subscription permanently. ULTRA only.", { id: z.string().describe("Subscription UUID") }, { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true }, async ({ id }) => ({
             content: [{ type: "text", text: await restQuery("DELETE", `/kol/first-touches/subscriptions/${encodeURIComponent(id)}`) }],
         }));
+        // ── Price alerts (PRO/ULTRA, v1.9) ──
+        server.tool("madeonsol_price_alerts_list", "List your price alerts. PRO=5 alerts, ULTRA=25. Each alert monitors a token's MC for dip/recovery events.", {}, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async () => ({
+            content: [{ type: "text", text: await restQuery("GET", "/price-alerts") }],
+        }));
+        server.tool("madeonsol_price_alerts_create", "Create a price alert. Captures baseline MC from current token_prices. Fires when MC drops below baseline × (1 − drop_pct/100). Optional recovery_pct fires again on recovery. Returns webhook_secret ONCE — store it.", {
+            token_mint: z.string().describe("Solana mint address (base58)"),
+            drop_pct: z.number().min(0.01).max(99.99).describe("Drop % threshold (0.01–99.99). Alert fires when MC drops below baseline × (1 − drop_pct/100)."),
+            recovery_pct: z.number().min(0.01).max(1000).optional().describe("Recovery % (0.01–1000). After dip fires, re-fires when MC rises above dip_low × (1 + recovery_pct/100)."),
+            name: z.string().optional().describe("Optional label"),
+            delivery_mode: z.enum(["webhook", "websocket", "both"]).optional().describe("Default 'webhook'"),
+            webhook_url: z.string().url().optional().describe("Required when delivery_mode includes 'webhook'"),
+        }, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }, async (args) => {
+            const body = {};
+            for (const [k, v] of Object.entries(args))
+                if (v !== undefined)
+                    body[k] = v;
+            return { content: [{ type: "text", text: await restQuery("POST", "/price-alerts", body) }] };
+        });
+        server.tool("madeonsol_price_alerts_get", "Get one price alert by id.", { id: z.number().describe("Alert id") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ id }) => ({
+            content: [{ type: "text", text: await restQuery("GET", `/price-alerts/${id}`) }],
+        }));
+        server.tool("madeonsol_price_alerts_update", "Update alert name, delivery mode, webhook URL, or is_active. Thresholds (drop_pct, recovery_pct) are immutable.", {
+            id: z.number().describe("Alert id"),
+            name: z.string().nullable().optional(),
+            delivery_mode: z.enum(["webhook", "websocket", "both"]).optional(),
+            webhook_url: z.string().url().nullable().optional(),
+            is_active: z.boolean().optional(),
+        }, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }, async ({ id, ...patch }) => {
+            const body = {};
+            for (const [k, v] of Object.entries(patch))
+                if (v !== undefined)
+                    body[k] = v;
+            return { content: [{ type: "text", text: await restQuery("PATCH", `/price-alerts/${id}`, body) }] };
+        });
+        server.tool("madeonsol_price_alerts_delete", "Delete a price alert and its event history.", { id: z.number().describe("Alert id") }, { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true }, async ({ id }) => ({
+            content: [{ type: "text", text: await restQuery("DELETE", `/price-alerts/${id}`) }],
+        }));
+        server.tool("madeonsol_price_alerts_events", "Fired price alert event history (30-day retention). Each event records the dip or recovery moment with actual MC values.", {
+            alert_id: z.number().optional().describe("Filter to a specific alert"),
+            event_type: z.enum(["dip", "recovery"]).optional().describe("Filter by event type"),
+            since: z.string().optional().describe("ISO 8601 — events after this timestamp"),
+            limit: z.number().min(1).max(200).optional().describe("Max events to return"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async (args) => {
+            const url = new URL(`${BASE_URL}/api/v1/price-alerts/events`);
+            for (const [k, v] of Object.entries(args)) {
+                if (v !== undefined)
+                    url.searchParams.set(k, String(v));
+            }
+            const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+            const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+            return { content: [{ type: "text", text }] };
+        });
+        // ── v1.9 new read endpoints ──
+        server.tool("madeonsol_scout_leaderboard", "Scout leaderboard — top KOLs ranked by scout score, first-touch frequency, and swarm attraction rate (% of first-touched tokens that attract 3+ follow-on KOLs within 4h). ULTRA only.", {
+            limit: z.number().min(1).max(100).optional().describe("Max entries to return"),
+            scout_tier: z.enum(["S", "A", "B", "C"]).optional().describe("Filter to a specific scout tier"),
+            sort: z.enum(["swarm_3plus_pct", "n_first_touches_30d", "swarm_5plus_pct", "scout_score"]).optional().describe("Sort axis"),
+        }, readOnlyAnnotations, async (args) => {
+            const url = new URL(`${BASE_URL}/api/v1/kol/scouts/leaderboard`);
+            for (const [k, v] of Object.entries(args)) {
+                if (v !== undefined)
+                    url.searchParams.set(k, String(v));
+            }
+            const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+            const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+            return { content: [{ type: "text", text }] };
+        });
+        server.tool("madeonsol_coordination_history", "Coordination history — past coordination alert fires with token, coordination score, KOL count, and timing. ULTRA only.", {
+            limit: z.number().min(1).max(100).optional().describe("Max entries to return"),
+            since: z.string().optional().describe("ISO 8601 — events after this timestamp"),
+            min_score: z.number().min(0).max(100).optional().describe("Minimum coordination score"),
+        }, readOnlyAnnotations, async (args) => {
+            const url = new URL(`${BASE_URL}/api/v1/kol/coordination/history`);
+            for (const [k, v] of Object.entries(args)) {
+                if (v !== undefined)
+                    url.searchParams.set(k, String(v));
+            }
+            const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+            const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+            return { content: [{ type: "text", text }] };
+        });
+        server.tool("madeonsol_kol_consensus", "KOL consensus on a specific token: total buyers/sellers, exit rate, net SOL flow, median entry MC. ULTRA adds individual buyer + exited wallet arrays.", {
+            mint: z.string().describe("Token mint address (base58)"),
+        }, readOnlyAnnotations, async ({ mint }) => ({
+            content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/kol-consensus`) }],
+        }));
+        server.tool("madeonsol_peak_history", "Peak MC history for a token: all-time high MC, decline from peak %, MC at bond, MC at 1h/6h/24h/7d after bond, time-to-bond, and deploy/bond timestamps.", {
+            mint: z.string().describe("Token mint address (base58)"),
+        }, readOnlyAnnotations, async ({ mint }) => ({
+            content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/peak-history`) }],
+        }));
         console.error("[madeonsol-mcp] Webhook & streaming tools enabled");
     }
     else {
@@ -681,7 +866,7 @@ async function main() {
                 res.end(JSON.stringify({
                     name: "madeonsol",
                     description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-                    version: "1.7.0",
+                    version: "1.10.0",
                     tools: [
                         { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
                         { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -709,6 +894,10 @@ async function main() {
                         { name: "madeonsol_wallet_tracker_remove", description: "Remove a wallet from your watchlist." },
                         { name: "madeonsol_wallet_tracker_trades", description: "Historical swap/transfer events for watched wallets." },
                         { name: "madeonsol_wallet_tracker_summary", description: "Per-wallet stats: swap counts, SOL bought/sold." },
+                        { name: "madeonsol_wallet_stats", description: "Aggregate stats + cross-product flags (is_kol/alpha/deployer) for any Solana wallet. PRO+." },
+                        { name: "madeonsol_wallet_pnl", description: "Full FIFO cost-basis PnL for any wallet: realized + unrealized, profit factor, drawdown, daily curve, closed + open positions. PRO+." },
+                        { name: "madeonsol_wallet_positions", description: "Open positions only for any wallet — lighter slice of /pnl. Live unrealized SOL from mc-tracker. PRO+." },
+                        { name: "madeonsol_wallet_trades", description: "Cursor-paginated raw trades for any wallet. Filter by action / token_mint / time window. PRO+." },
                         { name: "madeonsol_alpha_leaderboard", description: "Top profitable early-buyer wallets — 47,000+ scored. BASIC=25, PRO=100, ULTRA=500." },
                         { name: "madeonsol_alpha_wallet", description: "Full alpha profile + bot signals for one wallet. ULTRA only." },
                         { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
@@ -734,6 +923,16 @@ async function main() {
                         { name: "madeonsol_coordination_alerts_get", description: "Get one coordination alert rule. PRO/ULTRA." },
                         { name: "madeonsol_coordination_alerts_update", description: "Update fields on a coordination alert rule. PRO/ULTRA." },
                         { name: "madeonsol_coordination_alerts_delete", description: "Delete a coordination alert rule. PRO/ULTRA." },
+                        { name: "madeonsol_price_alerts_list", description: "List your price alerts. PRO/ULTRA." },
+                        { name: "madeonsol_price_alerts_create", description: "Create a price alert with dip/recovery thresholds. PRO/ULTRA." },
+                        { name: "madeonsol_price_alerts_get", description: "Get one price alert by id. PRO/ULTRA." },
+                        { name: "madeonsol_price_alerts_update", description: "Update a price alert. PRO/ULTRA." },
+                        { name: "madeonsol_price_alerts_delete", description: "Delete a price alert. PRO/ULTRA." },
+                        { name: "madeonsol_price_alerts_events", description: "Fired price alert event history (30d retention). PRO/ULTRA." },
+                        { name: "madeonsol_scout_leaderboard", description: "Scout leaderboard — top KOLs by scout score and swarm attraction. ULTRA." },
+                        { name: "madeonsol_coordination_history", description: "Past coordination alert fires with score and timing. ULTRA." },
+                        { name: "madeonsol_kol_consensus", description: "KOL consensus on a token: buyers/sellers, exit rate, net flow. ULTRA gets wallet arrays." },
+                        { name: "madeonsol_peak_history", description: "Peak MC history: ATH, decline %, MC at bond, MC at 1h/6h/24h/7d after bond." },
                     ],
                     homepage: "https://madeonsol.com/solana-api",
                     repository: "https://github.com/LamboPoewert/mcp-server-madeonsol",
@@ -749,7 +948,7 @@ async function main() {
                         transport = new StreamableHTTPServerTransport({
                             sessionIdGenerator: undefined,
                         });
-                        const server = new McpServer({ name: "madeonsol", version: "1.7.0" });
+                        const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
                         registerTools(server);
                         await server.connect(transport);
                     }
@@ -787,7 +986,7 @@ async function main() {
     }
     else {
         // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-        const server = new McpServer({ name: "madeonsol", version: "1.7.0" });
+        const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
         registerTools(server);
         const transport = new StdioServerTransport();
         await server.connect(transport);
