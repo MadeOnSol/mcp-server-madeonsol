@@ -11,8 +11,14 @@
 
 MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. Use from Claude Desktop, Cursor, or any MCP-compatible client.
 
-> Real-time Solana trading intelligence: track 1,000+ KOL wallets with <3s latency, score 23,000+ Pump.fun deployers by reputation, detect multi-KOL coordination signals, monitor any Solana wallet for swaps and transfers, and stream every DEX trade. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
+> Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency, score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
 
+> **New in 1.10** — **Deshred Sniper Alerts.** `madeonsol_sniper_recent` surfaces pump.fun deploys from shred-level data ~500ms before on-chain confirmation. PRO: elite/good deployers. ULTRA: all tiers + custom watchlist. Use `sniper:deploys` WebSocket or `sniper:deploy` webhook for live push.
+>
+> **New in 1.9** — **Price alerts, scout leaderboard, coordination history.** `madeonsol_price_alerts_*` CRUD (PRO=5, ULTRA=25). `madeonsol_scout_leaderboard` ranks top scouts by first-touch follow-on rate. `madeonsol_coordination_history` and `madeonsol_peak_history` expose the historical record. `madeonsol_wallet_stats` now returns `derived`: win_rate, roi, verdict, biggest_miss.
+>
+> **New in 1.8** — **Universal Wallet API.** `madeonsol_wallet_stats`, `madeonsol_wallet_pnl`, `madeonsol_wallet_positions`, `madeonsol_wallet_trades` — FIFO cost-basis PnL and cursor-paginated raw trades for any Solana wallet. PRO+. Cache hits don't count against quota.
+>
 > **New in 1.7.0** *(2026-05-12)* — Two new tools: **`madeonsol_me`** (account/quota introspection — read tier, remaining requests, and per-feature usage without parsing rate-limit headers) and **`madeonsol_tokens_list`** (PRO+ filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, plus computed 1h volume / MEV-share / MC-change deltas). Token responses now expose **velocity / MEV-share** fields. Token directory defaults to **`min_liq=2000`** to skip phantom-MC dust — pass `min_liq=0` to opt out. `/token/{mint}` now returns **structured 400 errors** (`code` / `reason` / `example` / `docs`) instead of plain strings. Deprecated `avg_entry_mc_usd` field fully removed from KOL/alpha leaderboards.
 
 ## Install via Smithery (one line)
