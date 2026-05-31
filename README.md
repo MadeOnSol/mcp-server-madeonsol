@@ -11,7 +11,7 @@
 
 MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. Use from Claude Desktop, Cursor, or any MCP-compatible client.
 
-> Real-time Solana trading intelligence: track 1,000+ KOL wallets with <3s latency, score 6,700+ Pump.fun deployers by reputation, detect multi-KOL coordination signals, monitor any Solana wallet for swaps and transfers, and stream every DEX trade. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
+> Real-time Solana trading intelligence: track 1,000+ KOL wallets with <3s latency, score 23,000+ Pump.fun deployers by reputation, detect multi-KOL coordination signals, monitor any Solana wallet for swaps and transfers, and stream every DEX trade. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
 
 > **New in 1.7.0** *(2026-05-12)* — Two new tools: **`madeonsol_me`** (account/quota introspection — read tier, remaining requests, and per-feature usage without parsing rate-limit headers) and **`madeonsol_tokens_list`** (PRO+ filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, plus computed 1h volume / MEV-share / MC-change deltas). Token responses now expose **velocity / MEV-share** fields. Token directory defaults to **`min_liq=2000`** to skip phantom-MC dust — pass `min_liq=0` to opt out. `/token/{mint}` now returns **structured 400 errors** (`code` / `reason` / `example` / `docs`) instead of plain strings. Deprecated `avg_entry_mc_usd` field fully removed from KOL/alpha leaderboards.
 
@@ -142,7 +142,7 @@ Cached server-side with dynamic TTL (5min / 1h / 24h based on last activity). Co
 
 ### Alpha Wallet Intelligence
 
-Scored from 47,000+ early-buyer records (wallets seen in the first 20 buyers of Pump.fun tokens).
+Scored from 1M+ early-buyer records (wallets seen in the first 20 buyers of Pump.fun tokens).
 
 | Tool | Tier | Description |
 |---|---|---|
@@ -247,8 +247,9 @@ CRUD for token dip/recovery price alerts. Fires when a token's market cap crosse
 | Tier | Price | Wallets tracked | Requests/day |
 |------|-------|-----------------|--------------|
 | Free | $0 | 10 | 200 |
-| Pro | $49/mo | 50 | 10,000 |
-| Ultra | $149/mo | 100 + WS events | 100,000 |
+| BASIC | $29/mo | 10 | 200 (all endpoints) |
+| Pro | $99/mo | 50 | 10,000 |
+| Ultra | $299/mo | 100 + WS events | 100,000 |
 
 Free tier returns the full REST response shape on every endpoint — real wallets, TX signatures, full precision. Paid tiers unlock webhooks, WebSockets, rule engines, and ULTRA-only data depth. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
 
