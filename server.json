@@ -1,20 +1,28 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.lambopoewert/madeonsol",
-  "description": "Solana KOL trading intelligence and deployer analytics. Real-time trade tracking for 946 KOL wallets, Pump.fun deployer alerts, webhook management, and WebSocket streaming. Pays per request via x402 USDC micropayments on Solana.",
+  "description": "Solana memecoin intelligence — real-time KOL wallet trades (1,000+ tracked wallets), Pump.fun deployer reputation, token quality scoring, wallet PnL, and pre-confirm launch alerts. 40+ tools. Free API key or pay-per-call via x402 USDC on Solana.",
   "repository": {
     "url": "https://github.com/LamboPoewert/mcp-server-madeonsol.git",
     "source": "github"
   },
-  "version": "0.2.1",
+  "version": "1.10.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-server-madeonsol",
-      "version": "0.2.1",
+      "version": "1.10.0",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "MADEONSOL_API_KEY",
+          "description": "MadeOnSol API key (msk_...). Get one free at https://madeonsol.com/pricing. Optional — AI agents can instead pay per call via x402 by setting SVM_PRIVATE_KEY.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
     }
   ]
 }
