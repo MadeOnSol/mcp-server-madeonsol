@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.lambopoewert/madeonsol",
-  "description": "Solana memecoin intelligence — real-time KOL wallet trades (1,000+ tracked wallets), Pump.fun deployer reputation, token quality scoring, wallet PnL, and pre-confirm launch alerts. 40+ tools. Free API key or pay-per-call via x402 USDC on Solana.",
+  "description": "Solana memecoin intelligence: KOL trades, deployer reputation, token & wallet scoring",
   "repository": {
     "url": "https://github.com/LamboPoewert/mcp-server-madeonsol.git",
     "source": "github"
