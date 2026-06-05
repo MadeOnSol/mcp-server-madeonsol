@@ -18,7 +18,7 @@ type AuthMode = "madeonsol" | "x402" | "none";
 let authMode: AuthMode = "none";
 let paidFetch: typeof fetch = fetch;
 
-const UA = "mcp-server-madeonsol/1.10.0";
+const UA = "mcp-server-madeonsol/1.10.2";
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -1299,7 +1299,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.10.0",
+          version: "1.10.2",
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1383,7 +1383,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
+            const server = new McpServer({ name: "madeonsol", version: "1.10.2" });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1425,7 +1425,7 @@ async function main() {
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
+    const server = new McpServer({ name: "madeonsol", version: "1.10.2" });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);
