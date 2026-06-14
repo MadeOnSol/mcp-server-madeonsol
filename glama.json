@@ -2,7 +2,7 @@
   "name": "mcp-server-madeonsol",
   "display_name": "MadeOnSol — Solana memecoin intelligence",
   "description": "Real-time Solana memecoin trading intelligence — track 1,000+ KOL wallets with <3s latency, score 6,700+ Pump.fun deployers, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 9+ programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day; auth via msk_ API key or x402 micropayments.",
-  "version": "1.7.4",
+  "version": "1.11.0",
   "homepage": "https://madeonsol.com/solana-api",
   "repository": "https://github.com/LamboPoewert/mcp-server-madeonsol",
   "license": "MIT",
@@ -79,6 +79,7 @@
     { "name": "madeonsol_test_webhook", "description": "Send a test payload to verify a webhook (PRO/ULTRA)." },
     { "name": "madeonsol_stream_token", "description": "Issue a 24h WebSocket streaming token (Pro/Ultra). Includes dex_ws_url on ULTRA." },
     { "name": "madeonsol_me", "description": "Account/quota introspection — tier, remaining requests, per-feature usage." },
+    { "name": "madeonsol_signal_performance", "description": "Signal performance stats for a named signal — hit rate by bucket, lift over base, sample size, confidence window. Supported: dump_cluster_count, runner_rate." },
     { "name": "madeonsol_discovery", "description": "List all available endpoints with x402 prices (free, no auth)." }
   ],
   "transports": ["stdio", "http"],
