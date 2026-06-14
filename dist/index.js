@@ -11,7 +11,7 @@ const PORT = parseInt(process.env.PORT || "3100", 10);
 const MODE = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "http"
 let authMode = "none";
 let paidFetch = fetch;
-const UA = "mcp-server-madeonsol/1.10.0";
+const UA = "mcp-server-madeonsol/1.11.0";
 function apiKeyHeaders() {
     const h = { "User-Agent": UA };
     if (authMode === "madeonsol") {
@@ -504,6 +504,9 @@ function registerTools(server) {
             max_mev_share_pct: z.number().optional().describe("Maximum MEV-share % of 1h volume (post-filter)"),
             mc_change_1h_min_pct: z.number().optional().describe("Minimum 1h MC change % (post-filter; negative allowed)"),
             mc_change_1h_max_pct: z.number().optional().describe("Maximum 1h MC change % (post-filter)"),
+            min_liq_mc_ratio: z.number().optional().describe("Minimum liquidity-to-MC ratio (0-1). Filters out tokens where liquidity is thin relative to market cap."),
+            max_liq_mc_ratio: z.number().optional().describe("Maximum liquidity-to-MC ratio (0-1)."),
+            deployer_tier: z.enum(["elite", "good", "moderate", "rising", "cold", "unranked"]).optional().describe("Filter by deployer reputation tier."),
             sort: z.enum(["mc_desc", "mc_asc", "last_trade_desc", "liquidity_desc", "cumulative_volume_desc"]).optional().describe("Sort axis (default mc_desc)"),
             limit: z.number().min(1).max(100).optional().describe("Page size (max 100)"),
             offset: z.number().min(0).optional().describe("Pagination offset"),
@@ -542,7 +545,7 @@ function registerTools(server) {
         server.tool("madeonsol_token_cap_table", "First non-deployer early buyers for a token, enriched with PnL, KOL identity, and bot flags. PRO=top 10 (truncated wallets), ULTRA=top 20 (full). BASIC: 403.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
             content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/cap-table`) }],
         }));
-        server.tool("madeonsol_token_buyer_quality", "0–100 buyer-quality score for a token's first-buyer cohort. 5-min cached. BASIC: score+signal only. PRO/ULTRA: full breakdown.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
+        server.tool("madeonsol_token_buyer_quality", "0–100 buyer-quality score for a token's first-buyer cohort. 5-min cached. Full breakdown on all tiers, incl. dump_cluster_count (3+ dump-cluster wallets in the first-20 → 94% historical dump rate vs 61% base) and recycled_early_buyer_count.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
             content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/buyer-quality`) }],
         }));
         server.tool("madeonsol_tokens_batch_buyer_quality", "Bulk buyer-quality scoring for up to 50 mints in one call. Shares the 5-min LRU cache with the single-mint endpoint — already-warm mints return at ~zero cost. Response includes cache_hits counter.", { mints: z.array(z.string()).min(1).max(50).describe("1–50 base58 Solana token mints") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mints }) => ({
@@ -822,6 +825,11 @@ function registerTools(server) {
         }, readOnlyAnnotations, async ({ mint }) => ({
             content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/peak-history`) }],
         }));
+        server.tool("madeonsol_signal_performance", "Signal performance stats for a named signal — hit rate, sample size, median outcome, and confidence window. Use this to evaluate how well a signal (e.g. 'kol_coordination', 'first_touch') has been predicting token moves before acting on it.", {
+            name: z.string().describe("Signal name (e.g. 'kol_coordination', 'first_touch', 'deployer_alert')"),
+        }, readOnlyAnnotations, async ({ name }) => ({
+            content: [{ type: "text", text: await restQuery("GET", `/signals/${encodeURIComponent(name)}/performance`) }],
+        }));
         console.error("[madeonsol-mcp] Webhook & streaming tools enabled");
     }
     else {
@@ -866,7 +874,7 @@ async function main() {
                 res.end(JSON.stringify({
                     name: "madeonsol",
                     description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-                    version: "1.10.0",
+                    version: "1.11.0",
                     tools: [
                         { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
                         { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -933,6 +941,7 @@ async function main() {
                         { name: "madeonsol_coordination_history", description: "Past coordination alert fires with score and timing. ULTRA." },
                         { name: "madeonsol_kol_consensus", description: "KOL consensus on a token: buyers/sellers, exit rate, net flow. ULTRA gets wallet arrays." },
                         { name: "madeonsol_peak_history", description: "Peak MC history: ATH, decline %, MC at bond, MC at 1h/6h/24h/7d after bond." },
+                        { name: "madeonsol_signal_performance", description: "Signal performance stats for a named signal — hit rate, sample size, median outcome, confidence window." },
                     ],
                     homepage: "https://madeonsol.com/solana-api",
                     repository: "https://github.com/LamboPoewert/mcp-server-madeonsol",
@@ -948,7 +957,7 @@ async function main() {
                         transport = new StreamableHTTPServerTransport({
                             sessionIdGenerator: undefined,
                         });
-                        const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
+                        const server = new McpServer({ name: "madeonsol", version: "1.11.0" });
                         registerTools(server);
                         await server.connect(transport);
                     }
@@ -986,7 +995,7 @@ async function main() {
     }
     else {
         // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-        const server = new McpServer({ name: "madeonsol", version: "1.10.0" });
+        const server = new McpServer({ name: "madeonsol", version: "1.11.0" });
         registerTools(server);
         const transport = new StdioServerTransport();
         await server.connect(transport);

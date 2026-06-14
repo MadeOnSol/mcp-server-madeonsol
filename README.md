@@ -13,6 +13,12 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 
 > Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency, score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
 
+> **New in 1.11.0** — `madeonsol_tokens_list` gains three new filter params: `min_liq_mc_ratio`, `max_liq_mc_ratio`, and `deployer_tier`. Response items now include `liquidity_to_mc_ratio` and `deployer_tier`. New tool: `madeonsol_signal_performance` — evaluate signal efficacy (hit rate, sample size, median outcome) before acting on any signal. KOL leaderboard entries now include `median_hold_minutes_30d` and `percentile_early_entry_30d`.
+>
+> **New in 1.10.4** — Deployer alerts/profiles now expose `runner_rate` + `labeled_tokens` (fraction of a deployer's labeled tokens that ran vs dumped, gate on `labeled_tokens` ≥3) plus `avg_time_to_bond_minutes`.
+
+> **New in 1.10.3** — **Dump-cluster detection.** `madeonsol_token_buyer_quality` breakdown now includes `dump_cluster_count` (3+ dump-cluster wallets in the first-20 → 94% historical dump rate vs 61% base) and `recycled_early_buyer_count`. Full breakdown is returned on all tiers. Also: the API now pushes every pump.fun graduation in real time (`token:graduations` WS channel).
+
 > **New in 1.10** — **Deshred Sniper Alerts.** `madeonsol_sniper_recent` surfaces pump.fun deploys from shred-level data ~500ms before on-chain confirmation. PRO: elite/good deployers. ULTRA: all tiers + custom watchlist. Use `sniper:deploys` WebSocket or `sniper:deploy` webhook for live push.
 >
 > **New in 1.9** — **Price alerts, scout leaderboard, coordination history.** `madeonsol_price_alerts_*` CRUD (PRO=5, ULTRA=25). `madeonsol_scout_leaderboard` ranks top scouts by first-touch follow-on rate. `madeonsol_coordination_history` and `madeonsol_peak_history` expose the historical record. `madeonsol_wallet_stats` now returns `derived`: win_rate, roi, verdict, biggest_miss.
