@@ -13,6 +13,8 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 
 > Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency, score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
 
+> **New in 1.12.0** — **Token risk score.** New tool `madeonsol_token_risk` — a transparent 0–100 rug-risk/safety score (higher = riskier) with a `band` (safe/caution/danger), an explainable `factors[]` array, and the raw `inputs` (mint/freeze authority, liquidity, liq-to-MC ratio, transfer fee, launch cohort, deployer bond rate, KOL signal, blacklist). PRO/ULTRA only.
+>
 > **New in 1.11.0** — `madeonsol_tokens_list` gains three new filter params: `min_liq_mc_ratio`, `max_liq_mc_ratio`, and `deployer_tier`. Response items now include `liquidity_to_mc_ratio` and `deployer_tier`. New tool: `madeonsol_signal_performance` — evaluate signal efficacy (hit rate, sample size, median outcome) before acting on any signal. KOL leaderboard entries now include `median_hold_minutes_30d` and `percentile_early_entry_30d`.
 >
 > **New in 1.10.4** — Deployer alerts/profiles now expose `runner_rate` + `labeled_tokens` (fraction of a deployer's labeled tokens that ran vs dumped, gate on `labeled_tokens` ≥3) plus `avg_time_to_bond_minutes`.
@@ -169,6 +171,7 @@ Scored from 1M+ early-buyer records (wallets seen in the first 20 buyers of Pump
 | `madeonsol_tokens_list` | PRO+ | Filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, computed 1h volume / MEV-share / MC-change deltas. Default `min_liq=2000` skips phantom-MC dust. |
 | `madeonsol_token_cap_table` | PRO+ | First non-deployer early buyers, enriched with PnL/KOL/bot flags. PRO=10, ULTRA=20 |
 | `madeonsol_token_buyer_quality` | All | 0–100 buyer-quality score + full breakdown (5-min cached) |
+| `madeonsol_token_risk` | PRO+ | Transparent 0–100 rug-risk/safety score with `band`, explainable `factors[]`, and raw `inputs` |
 
 ### Copy-Trade Rules (PRO/ULTRA)
 

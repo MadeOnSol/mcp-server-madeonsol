@@ -18,7 +18,7 @@ type AuthMode = "madeonsol" | "x402" | "none";
 let authMode: AuthMode = "none";
 let paidFetch: typeof fetch = fetch;
 
-const UA = "mcp-server-madeonsol/1.11.0";
+const UA = "mcp-server-madeonsol/1.12.0";
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -762,6 +762,16 @@ function registerTools(server: McpServer) {
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ mint }) => ({
         content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/buyer-quality`) }],
+      })
+    );
+
+    server.tool(
+      "madeonsol_token_risk",
+      "Transparent 0–100 token rug-risk/safety score (higher = riskier). Returns a band (safe/caution/danger), an explainable factors[] array (mint authority, freeze authority, liquidity, transfer fee, token-2022, burn, launch cohort, deployer bond rate, KOL signal, blacklist) each with status/points/detail, and the raw inputs that produced the score. PRO/ULTRA only — BASIC receives HTTP 403.",
+      { mint: z.string().describe("Token mint address (base58)") },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint }) => ({
+        content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/risk`) }],
       })
     );
 
