@@ -18,7 +18,7 @@ type AuthMode = "madeonsol" | "x402" | "none";
 let authMode: AuthMode = "none";
 let paidFetch: typeof fetch = fetch;
 
-const UA = "mcp-server-madeonsol/1.12.0";
+const UA = "mcp-server-madeonsol/1.14.0";
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -776,6 +776,46 @@ function registerTools(server: McpServer) {
     );
 
     server.tool(
+      "madeonsol_token_candles",
+      "Historical OHLCV price candles for a token, aggregated from the on-chain trade firehose. Each candle carries t/open/high/low/close/volume_usd/trades/market_cap_usd. Timeframes: 1m/5m/15m/1h/4h/1d. PRO=OHLCV, last 30 days only. ULTRA adds buy/sell volume + count splits, net flow, MEV volume, open/close liquidity, high/low MC, and full history. PRO/ULTRA only — BASIC receives HTTP 403.",
+      {
+        mint: z.string().describe("Token mint address (base58)"),
+        tf: z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]).optional().describe("Candle timeframe (default 1h)"),
+        limit: z.number().min(1).max(1000).optional().describe("Number of candles to return, 1–1000 (default 200)"),
+        from: z.string().optional().describe("Start of range, ISO8601 timestamp"),
+        to: z.string().optional().describe("End of range, ISO8601 timestamp"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint, tf, limit, from, to }) => {
+        const qs = new URLSearchParams();
+        if (tf !== undefined) qs.set("tf", tf);
+        if (limit !== undefined) qs.set("limit", String(limit));
+        if (from !== undefined) qs.set("from", from);
+        if (to !== undefined) qs.set("to", to);
+        const query = qs.toString();
+        const path = `/tokens/${encodeURIComponent(mint)}/candles${query ? `?${query}` : ""}`;
+        return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
+    );
+
+    server.tool(
+      "madeonsol_token_flow",
+      "Trade-flow aggregate for a token — an organic-vs-fake volume read over a 1h/24h window. Returns unique_wallets / unique_buyers / unique_sellers, buy_count / sell_count / total_trades, buy_sol / sell_sol / net_sol (sell − buy; positive = net SOL leaving the pool), and trades_per_wallet (wash-trading proxy: high = a small set of wallets churning volume). PRO/ULTRA only — BASIC receives HTTP 403.",
+      {
+        mint: z.string().describe("Token mint address (base58)"),
+        window: z.enum(["1h", "24h"]).optional().describe("Lookback window (default 1h)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint, window }) => {
+        const qs = new URLSearchParams();
+        if (window !== undefined) qs.set("window", window);
+        const query = qs.toString();
+        const path = `/tokens/${encodeURIComponent(mint)}/flow${query ? `?${query}` : ""}`;
+        return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
+    );
+
+    server.tool(
       "madeonsol_tokens_batch_buyer_quality",
       "Bulk buyer-quality scoring for up to 50 mints in one call. Shares the 5-min LRU cache with the single-mint endpoint — already-warm mints return at ~zero cost. Response includes cache_hits counter.",
       { mints: z.array(z.string()).min(1).max(50).describe("1–50 base58 Solana token mints") },
@@ -1324,7 +1364,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.11.0",
+          version: "1.13.0",
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1361,6 +1401,7 @@ async function main() {
             { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
             { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
             { name: "madeonsol_token_buyer_quality", description: "0–100 buyer quality score for a token's first-buyer cohort." },
+            { name: "madeonsol_token_candles", description: "Historical OHLCV price candles (1m–1d). PRO=OHLCV 30d; ULTRA=+net flow, liquidity delta, full history." },
             { name: "madeonsol_tokens_batch_buyer_quality", description: "Bulk buyer-quality scoring for up to 50 mints. Shares the LRU cache." },
             { name: "madeonsol_token_get", description: "Comprehensive per-mint snapshot: price, MC, volume, deployer, KOL, age, blacklist." },
             { name: "madeonsol_token_batch", description: "Bulk token snapshot for up to 50 mints — ~10-20× cheaper than N sequential calls." },
@@ -1409,7 +1450,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.11.0" });
+            const server = new McpServer({ name: "madeonsol", version: "1.13.0" });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1451,7 +1492,7 @@ async function main() {
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: "1.11.0" });
+    const server = new McpServer({ name: "madeonsol", version: "1.13.0" });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);

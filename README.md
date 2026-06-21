@@ -13,6 +13,10 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 
 > Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency, score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
 
+> **New in 1.14.0** — **Token trade flow.** New tool `madeonsol_token_flow` — a trade-flow aggregate (organic-vs-fake volume) over a `1h`/`24h` window: `unique_wallets` / `unique_buyers` / `unique_sellers`, `buy_count` / `sell_count` / `total_trades`, `buy_sol` / `sell_sol` / `net_sol` (sell − buy; positive = net SOL leaving the pool), and `trades_per_wallet` (wash-trading proxy). PRO/ULTRA only. Deployer alerts (`madeonsol_deployer_alerts`) now carry `deployers.deployer_sol_balance` — the deployer wallet's SOL balance at alert time (null for historical rows).
+>
+> **New in 1.13.0** — **Token OHLCV candles.** New tool `madeonsol_token_candles` — historical price candles (1m/5m/15m/1h/4h/1d) aggregated from the on-chain trade firehose. Each candle has `t/open/high/low/close/volume_usd/trades/market_cap_usd`. PRO returns OHLCV for the last 30 days; ULTRA adds buy/sell volume + count splits, net flow, MEV volume, open/close liquidity, high/low MC, and full history. PRO/ULTRA only.
+>
 > **New in 1.12.0** — **Token risk score.** New tool `madeonsol_token_risk` — a transparent 0–100 rug-risk/safety score (higher = riskier) with a `band` (safe/caution/danger), an explainable `factors[]` array, and the raw `inputs` (mint/freeze authority, liquidity, liq-to-MC ratio, transfer fee, launch cohort, deployer bond rate, KOL signal, blacklist). PRO/ULTRA only.
 >
 > **New in 1.11.0** — `madeonsol_tokens_list` gains three new filter params: `min_liq_mc_ratio`, `max_liq_mc_ratio`, and `deployer_tier`. Response items now include `liquidity_to_mc_ratio` and `deployer_tier`. New tool: `madeonsol_signal_performance` — evaluate signal efficacy (hit rate, sample size, median outcome) before acting on any signal. KOL leaderboard entries now include `median_hold_minutes_30d` and `percentile_early_entry_30d`.
@@ -121,7 +125,7 @@ Add to MCP settings with the same command and env vars.
 
 | Tool | Description |
 |---|---|
-| `madeonsol_deployer_alerts` | Pump.fun deployer launches with KOL enrichment. Filter by tier (elite/good/moderate/rising/cold). ULTRA unlocks full pagination. |
+| `madeonsol_deployer_alerts` | Pump.fun deployer launches with KOL enrichment. Filter by tier (elite/good/moderate/rising/cold). ULTRA unlocks full pagination. Each alert's `deployers` now includes `deployer_sol_balance` — the deployer wallet's SOL balance at alert time (null for historical rows). |
 | `madeonsol_deployer_trajectory` | Deployer skill curve — streaks, rolling bond rate, trend — available on all tiers |
 
 ### Deshred Sniper Alerts *(new in 1.10 — Pro/Ultra)*
@@ -172,6 +176,8 @@ Scored from 1M+ early-buyer records (wallets seen in the first 20 buyers of Pump
 | `madeonsol_token_cap_table` | PRO+ | First non-deployer early buyers, enriched with PnL/KOL/bot flags. PRO=10, ULTRA=20 |
 | `madeonsol_token_buyer_quality` | All | 0–100 buyer-quality score + full breakdown (5-min cached) |
 | `madeonsol_token_risk` | PRO+ | Transparent 0–100 rug-risk/safety score with `band`, explainable `factors[]`, and raw `inputs` |
+| `madeonsol_token_candles` | PRO+ | Historical OHLCV candles (1m–1d). PRO=OHLCV 30d; ULTRA=+net flow, liquidity delta, MEV volume, full history |
+| `madeonsol_token_flow` | PRO+ | Trade-flow aggregate (organic-vs-fake volume) over a 1h/24h `window` — unique wallets/buyers/sellers, buy/sell counts + SOL, `net_sol`, `trades_per_wallet` wash-trading proxy |
 
 ### Copy-Trade Rules (PRO/ULTRA)
 
