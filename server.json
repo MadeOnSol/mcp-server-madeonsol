@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.lambopoewert/madeonsol",
+  "name": "io.github.LamboPoewert/madeonsol",
   "description": "Solana KOL trading intelligence & deployer analytics via x402 micropayments or API key.",
   "repository": {
     "url": "https://github.com/LamboPoewert/mcp-server-madeonsol.git",
