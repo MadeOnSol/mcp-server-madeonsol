@@ -13,6 +13,8 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 
 > Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency, score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day at [madeonsol.com/pricing](https://madeonsol.com/pricing) — no credit card required.
 
+> **New in 1.15.0** — **Almost-bonded discovery + trending sorts.** New tool `madeonsol_almost_bonded` — pre-bond pump.fun tokens near graduation, ranked by velocity (Δprogress/min): "95% and accelerating" beats "92% stalled". Each token carries `progress_pct`, `velocity_pct_per_min`, `eta_minutes`, `stalled`, `real_sol_reserves`, `market_cap_usd`, `liquidity_usd`, `authorities_revoked`, `deployer_tier`, and `age_minutes`. Params: `min_progress`, `max_progress`, `min_velocity_pct_per_min`, `max_age_minutes`, `deployer_tier`, `authority_revoked`, `min_liq`, `sort` (velocity_desc / progress_desc / eta_asc), `limit`. PRO/ULTRA only. Plus `madeonsol_tokens_list` gains four momentum sorts — `mc_change_5m_desc`, `mc_change_1h_desc`, `volume_1h_desc`, and `trending` (composite recent-volume × positive-momentum rank).
+>
 > **New in 1.14.0** — **Token trade flow.** New tool `madeonsol_token_flow` — a trade-flow aggregate (organic-vs-fake volume) over a `1h`/`24h` window: `unique_wallets` / `unique_buyers` / `unique_sellers`, `buy_count` / `sell_count` / `total_trades`, `buy_sol` / `sell_sol` / `net_sol` (sell − buy; positive = net SOL leaving the pool), and `trades_per_wallet` (wash-trading proxy). PRO/ULTRA only. Deployer alerts (`madeonsol_deployer_alerts`) now carry `deployers.deployer_sol_balance` — the deployer wallet's SOL balance at alert time (null for historical rows).
 >
 > **New in 1.13.0** — **Token OHLCV candles.** New tool `madeonsol_token_candles` — historical price candles (1m/5m/15m/1h/4h/1d) aggregated from the on-chain trade firehose. Each candle has `t/open/high/low/close/volume_usd/trades/market_cap_usd`. PRO returns OHLCV for the last 30 days; ULTRA adds buy/sell volume + count splits, net flow, MEV volume, open/close liquidity, high/low MC, and full history. PRO/ULTRA only.
@@ -62,6 +64,37 @@ Add to `claude_desktop_config.json` or Cursor MCP settings (free tier at https:/
 ```
 
 Restart Claude Desktop and ask: *"What are KOLs buying right now?"*
+
+## AI agent quickstart (x402 / pay-per-call)
+
+Building an autonomous agent? Skip the signup. Point a **funded Solana wallet** at the server and every tool call **auto-pays a micropayment** over [x402](https://x402.org) — no API key, no account, no rate-limit dance.
+
+```json
+{
+  "mcpServers": {
+    "madeonsol": {
+      "command": "mcp-server-madeonsol",
+      "env": {
+        "SVM_PRIVATE_KEY": "<base58 solana private key>"
+      }
+    }
+  }
+}
+```
+
+How it works:
+
+- The wallet behind `SVM_PRIVATE_KEY` settles each request as a **USDC micropayment on Solana** (~$0.005–$0.02 per call, settled on-chain). No subscription, no quota.
+- The free **`madeonsol_discovery`** tool needs no auth and returns every endpoint with its exact per-call price — call it first to see what each tool costs.
+- Install the x402 peer deps alongside the server (only required for this mode):
+
+  ```bash
+  npm install -g mcp-server-madeonsol @x402/fetch @x402/svm @x402/core @solana/kit @scure/base
+  ```
+
+> **Data only.** MadeOnSol returns trading *intelligence* — it never trades, signs swaps, or takes custody of funds. The only thing your wallet ever pays for is the per-call data fee.
+
+Prefer a fixed monthly bill, free tier, or no wallet? Use the developer path below.
 
 ## Authentication
 
@@ -172,7 +205,8 @@ Scored from 1M+ early-buyer records (wallets seen in the first 20 buyers of Pump
 
 | Tool | Tier | Description |
 |---|---|---|
-| `madeonsol_tokens_list` | PRO+ | Filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, computed 1h volume / MEV-share / MC-change deltas. Default `min_liq=2000` skips phantom-MC dust. |
+| `madeonsol_tokens_list` | PRO+ | Filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, computed 1h volume / MEV-share / MC-change deltas, plus momentum sorts (`mc_change_5m_desc`, `mc_change_1h_desc`, `volume_1h_desc`, `trending`). Default `min_liq=2000` skips phantom-MC dust. |
+| `madeonsol_almost_bonded` | PRO+ | Pre-bond pump.fun tokens near graduation, ranked by velocity (Δprogress/min) — `progress_pct`, `velocity_pct_per_min`, `eta_minutes`, `stalled`, `deployer_tier`, `age_minutes` |
 | `madeonsol_token_cap_table` | PRO+ | First non-deployer early buyers, enriched with PnL/KOL/bot flags. PRO=10, ULTRA=20 |
 | `madeonsol_token_buyer_quality` | All | 0–100 buyer-quality score + full breakdown (5-min cached) |
 | `madeonsol_token_risk` | PRO+ | Transparent 0–100 rug-risk/safety score with `band`, explainable `factors[]`, and raw `inputs` |

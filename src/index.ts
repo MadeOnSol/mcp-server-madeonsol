@@ -14,11 +14,35 @@ const PORT = parseInt(process.env.PORT || "3100", 10);
 const MODE = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "http"
 
 // Auth mode: MADEONSOL_API_KEY > SVM_PRIVATE_KEY (x402)
-type AuthMode = "madeonsol" | "x402" | "none";
+export type AuthMode = "madeonsol" | "x402" | "none";
 let authMode: AuthMode = "none";
 let paidFetch: typeof fetch = fetch;
 
-const UA = "mcp-server-madeonsol/1.14.0";
+/**
+ * Pure selection of the auth mode from environment. Extracted from initAuth()
+ * so the routing/auth-mode logic is unit-testable without setting up signers or
+ * network. Priority: MADEONSOL_API_KEY (Bearer) > SVM_PRIVATE_KEY (x402) > none.
+ */
+export function resolveAuthMode(
+  env: { MADEONSOL_API_KEY?: string; SVM_PRIVATE_KEY?: string } = process.env,
+): AuthMode {
+  if (env.MADEONSOL_API_KEY) return "madeonsol";
+  if (env.SVM_PRIVATE_KEY) return "x402";
+  return "none";
+}
+
+/**
+ * Pure path rewrite. Tools are authored against /api/x402/ paths. In x402 / none
+ * mode the path is kept as-is; in madeonsol (API key) mode the prefix is
+ * rewritten to /api/v1/. Extracted from query() so it is unit-testable.
+ */
+export function rewritePath(path: string, mode: AuthMode): string {
+  return mode === "x402" || mode === "none"
+    ? path
+    : path.replace("/api/x402/", "/api/v1/");
+}
+
+const UA = "mcp-server-madeonsol/1.15.1";
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -29,12 +53,13 @@ function apiKeyHeaders(): Record<string, string> {
 }
 
 async function initAuth() {
-  if (MADEONSOL_API_KEY) {
+  const mode = resolveAuthMode({ MADEONSOL_API_KEY, SVM_PRIVATE_KEY: PRIVATE_KEY });
+  if (mode === "madeonsol") {
     authMode = "madeonsol";
     console.error("[madeonsol-mcp] Using MadeOnSol API key (Bearer auth)");
     return;
   }
-  if (PRIVATE_KEY) {
+  if (mode === "x402" && PRIVATE_KEY) {
     try {
       const { wrapFetchWithPayment } = await import("@x402/fetch");
       const { x402Client } = await import("@x402/core/client");
@@ -62,9 +87,7 @@ async function initAuth() {
 
 async function query(path: string, params?: Record<string, string | number>) {
   // API key uses /api/v1/ endpoints; x402 uses /api/x402/
-  const apiPath = authMode === "x402" || authMode === "none"
-    ? path
-    : path.replace("/api/x402/", "/api/v1/");
+  const apiPath = rewritePath(path, authMode);
   const url = new URL(apiPath, BASE_URL);
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -685,13 +708,39 @@ function registerTools(server: McpServer) {
         min_liq_mc_ratio: z.number().optional().describe("Minimum liquidity-to-MC ratio (0-1). Filters out tokens where liquidity is thin relative to market cap."),
         max_liq_mc_ratio: z.number().optional().describe("Maximum liquidity-to-MC ratio (0-1)."),
         deployer_tier: z.enum(["elite", "good", "moderate", "rising", "cold", "unranked"]).optional().describe("Filter by deployer reputation tier."),
-        sort: z.enum(["mc_desc", "mc_asc", "last_trade_desc", "liquidity_desc", "cumulative_volume_desc"]).optional().describe("Sort axis (default mc_desc)"),
+        sort: z.enum(["mc_desc", "mc_asc", "last_trade_desc", "liquidity_desc", "cumulative_volume_desc", "mc_change_5m_desc", "mc_change_1h_desc", "volume_1h_desc", "trending"]).optional().describe("Sort axis (default mc_desc). Momentum sorts: mc_change_5m_desc, mc_change_1h_desc, volume_1h_desc, trending (composite recent-volume × positive-momentum rank)."),
         limit: z.number().min(1).max(100).optional().describe("Page size (max 100)"),
         offset: z.number().min(0).optional().describe("Pagination offset"),
       },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async (args) => {
         const url = new URL(`${BASE_URL}/api/v1/tokens`);
+        for (const [k, v] of Object.entries(args)) {
+          if (v !== undefined) url.searchParams.set(k, typeof v === "boolean" ? (v ? "true" : "false") : String(v));
+        }
+        const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+        const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+        return { content: [{ type: "text" as const, text }] };
+      }
+    );
+
+    server.tool(
+      "madeonsol_almost_bonded",
+      "Pre-bond pump.fun tokens approaching graduation, ranked by VELOCITY (Δprogress/min) — '95% and accelerating' beats '92% stalled'. Each token is enriched with its deployer's reputation tier. progress_pct comes from on-chain real_token_reserves depletion; velocity_pct_per_min is null until a 5-minute snapshot exists; eta_minutes is a linear projection from current velocity. Returns tokens[] with mint, symbol, name, progress_pct, velocity_pct_per_min, eta_minutes, stalled, real_sol_reserves, market_cap_usd, liquidity_usd, authorities_revoked, deployer_tier, age_minutes. PRO/ULTRA only.",
+      {
+        min_progress: z.number().min(0).max(100).optional().describe("Lower bound on bonding progress % (default 80)"),
+        max_progress: z.number().min(0).max(100).optional().describe("Upper bound on bonding progress % (default 99.99 — already-bonded excluded)"),
+        min_velocity_pct_per_min: z.number().optional().describe("Minimum Δprogress/min; tokens without a 5m-ago snapshot are dropped when set"),
+        max_age_minutes: z.number().min(1).optional().describe("Max minutes since deploy (post-filter)"),
+        deployer_tier: z.enum(["elite", "good", "moderate", "rising", "cold", "unranked"]).optional().describe("Filter by deployer reputation tier"),
+        authority_revoked: z.boolean().optional().describe("Only tokens whose mint+freeze authorities are revoked"),
+        min_liq: z.number().min(0).optional().describe("Minimum liquidity in USD"),
+        sort: z.enum(["velocity_desc", "progress_desc", "eta_asc"]).optional().describe("Sort axis (default velocity_desc)"),
+        limit: z.number().min(1).max(100).optional().describe("Page size (1-100, default 50)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async (args) => {
+        const url = new URL(`${BASE_URL}/api/v1/tokens/almost-bonded`);
         for (const [k, v] of Object.entries(args)) {
           if (v !== undefined) url.searchParams.set(k, typeof v === "boolean" ? (v ? "true" : "false") : String(v));
         }
@@ -1364,7 +1413,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.13.0",
+          version: "1.15.1",
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1386,7 +1435,8 @@ async function main() {
             { name: "madeonsol_test_webhook", description: "Send a test payload to verify a webhook. Pro/Ultra." },
             { name: "madeonsol_stream_token", description: "Get a 24h WebSocket streaming token. Pro/Ultra." },
             { name: "madeonsol_me", description: "Inspect your account — tier, quota state, remaining requests, subscription expiry, per-feature usage." },
-            { name: "madeonsol_tokens_list", description: "Filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, computed 1h volume / MEV-share / MC-change. PRO+." },
+            { name: "madeonsol_tokens_list", description: "Filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, computed 1h volume / MEV-share / MC-change, plus momentum sorts (mc_change_5m_desc, mc_change_1h_desc, volume_1h_desc, trending). PRO+." },
+            { name: "madeonsol_almost_bonded", description: "Pre-bond pump.fun tokens near graduation, ranked by velocity (Δprogress/min) — progress_pct, velocity_pct_per_min, eta_minutes, stalled, deployer_tier. PRO+." },
             { name: "madeonsol_wallet_tracker_watchlist", description: "List your tracked wallets and remaining capacity." },
             { name: "madeonsol_wallet_tracker_add", description: "Add a wallet to your watchlist." },
             { name: "madeonsol_wallet_tracker_remove", description: "Remove a wallet from your watchlist." },
@@ -1450,7 +1500,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.13.0" });
+            const server = new McpServer({ name: "madeonsol", version: "1.15.1" });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1499,4 +1549,8 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only auto-run when executed as a program (CLI / spawned process), not when
+// the module is imported by a test for its exported pure helpers.
+if (process.env.MADEONSOL_MCP_NO_AUTORUN !== "1") {
+  main().catch(console.error);
+}
