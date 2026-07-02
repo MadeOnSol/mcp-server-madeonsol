@@ -46,7 +46,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/madeonsol/mcp-server-madeonsol"
+    "url": "https://github.com/LamboPoewert/mcp-server-madeonsol"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
