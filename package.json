@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-madeonsol",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "mcpName": "io.github.LamboPoewert/madeonsol",
   "description": "MCP server for MadeOnSol Solana KOL intelligence API — use from Claude, Cursor, or any MCP client",
   "type": "module",
@@ -16,7 +16,6 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
     "preflight": "bash ../../scripts/preflight-publish.sh",
     "prepublishOnly": "npm run preflight && npm run build"
   },
@@ -62,7 +61,6 @@
   },
   "devDependencies": {
     "@types/node": "^20",
-    "typescript": "^5",
-    "vitest": "^4.1.5"
+    "typescript": "^5"
   }
 }

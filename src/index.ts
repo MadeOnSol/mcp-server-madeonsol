@@ -42,7 +42,7 @@ export function rewritePath(path: string, mode: AuthMode): string {
     : path.replace("/api/x402/", "/api/v1/");
 }
 
-const UA = "mcp-server-madeonsol/1.15.1";
+const UA = "mcp-server-madeonsol/1.16.0";
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -675,6 +675,26 @@ function registerTools(server: McpServer) {
       })
     );
 
+    server.tool(
+      "madeonsol_stream_sessions_list",
+      "List your live WebSocket streaming sessions. Returns sessions[] (each with id, service 'ws-streaming'|'dex-stream', tier, channels[], connected_at, remote_ip, messages_sent) and count. Use it to see which connections are holding your per-tier socket slots before evicting a ghost with madeonsol_stream_session_kill. PRO/ULTRA only.",
+      {},
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async () => ({
+        content: [{ type: "text" as const, text: await restQuery("GET", "/stream/sessions") }],
+      })
+    );
+
+    server.tool(
+      "madeonsol_stream_session_kill",
+      "Evict (force-disconnect) one live WebSocket streaming session by id — frees the connection slot it holds. Returns { evicted: true, id }; 404 { error, id } if no such live session, 400 if id is not a positive integer. PRO/ULTRA only.",
+      { id: z.number().int().positive().describe("Session id from madeonsol_stream_sessions_list (positive integer)") },
+      { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+      async ({ id }) => ({
+        content: [{ type: "text" as const, text: await restQuery("DELETE", `/stream/sessions/${id}`) }],
+      })
+    );
+
     // ── Account / quota introspection ──
 
     server.tool(
@@ -871,6 +891,16 @@ function registerTools(server: McpServer) {
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ mints }) => ({
         content: [{ type: "text" as const, text: await restQuery("POST", "/tokens/batch/buyer-quality", { mints }) }],
+      })
+    );
+
+    server.tool(
+      "madeonsol_tokens_batch_risk",
+      "Bulk token rug-risk/safety scoring for up to 50 mints in one call — same per-mint shape as madeonsol_token_risk (0–100 score, band, explainable factors[], raw inputs) plus an as_of ISO timestamp. Untracked mints come back as { mint, error: 'not_tracked' } and do NOT fail the batch; per-mint failures come back as { mint, error: 'error' }. Response preserves de-duplicated input order and carries count (number of unique mints). Counts as ONE request against your quota. PRO/ULTRA only.",
+      { mints: z.array(z.string()).min(1).max(50).describe("1–50 base58 Solana token mints") },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mints }) => ({
+        content: [{ type: "text" as const, text: await restQuery("POST", "/tokens/batch/risk", { mints }) }],
       })
     );
 
@@ -1413,7 +1443,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 6,700+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.15.1",
+          version: "1.16.0",
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1434,6 +1464,8 @@ async function main() {
             { name: "madeonsol_delete_webhook", description: "Delete a webhook by ID. Pro/Ultra." },
             { name: "madeonsol_test_webhook", description: "Send a test payload to verify a webhook. Pro/Ultra." },
             { name: "madeonsol_stream_token", description: "Get a 24h WebSocket streaming token. Pro/Ultra." },
+            { name: "madeonsol_stream_sessions_list", description: "List your live WebSocket streaming sessions (id, service, tier, channels, connected_at, messages_sent). PRO/ULTRA." },
+            { name: "madeonsol_stream_session_kill", description: "Evict a live WebSocket streaming session by id — frees its connection slot. PRO/ULTRA." },
             { name: "madeonsol_me", description: "Inspect your account — tier, quota state, remaining requests, subscription expiry, per-feature usage." },
             { name: "madeonsol_tokens_list", description: "Filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, computed 1h volume / MEV-share / MC-change, plus momentum sorts (mc_change_5m_desc, mc_change_1h_desc, volume_1h_desc, trending). PRO+." },
             { name: "madeonsol_almost_bonded", description: "Pre-bond pump.fun tokens near graduation, ranked by velocity (Δprogress/min) — progress_pct, velocity_pct_per_min, eta_minutes, stalled, deployer_tier. PRO+." },
@@ -1453,6 +1485,7 @@ async function main() {
             { name: "madeonsol_token_buyer_quality", description: "0–100 buyer quality score for a token's first-buyer cohort." },
             { name: "madeonsol_token_candles", description: "Historical OHLCV price candles (1m–1d). PRO=OHLCV 30d; ULTRA=+net flow, liquidity delta, full history." },
             { name: "madeonsol_tokens_batch_buyer_quality", description: "Bulk buyer-quality scoring for up to 50 mints. Shares the LRU cache." },
+            { name: "madeonsol_tokens_batch_risk", description: "Bulk rug-risk/safety scoring for up to 50 mints — same shape as madeonsol_token_risk + as_of; untracked mints don't fail the batch. PRO+." },
             { name: "madeonsol_token_get", description: "Comprehensive per-mint snapshot: price, MC, volume, deployer, KOL, age, blacklist." },
             { name: "madeonsol_token_batch", description: "Bulk token snapshot for up to 50 mints — ~10-20× cheaper than N sequential calls." },
             { name: "madeonsol_copytrade_list", description: "List your copy-trade rules. PRO/ULTRA." },
@@ -1500,7 +1533,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.15.1" });
+            const server = new McpServer({ name: "madeonsol", version: "1.16.0" });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1542,7 +1575,7 @@ async function main() {
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: "1.13.0" });
+    const server = new McpServer({ name: "madeonsol", version: "1.16.0" });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);
