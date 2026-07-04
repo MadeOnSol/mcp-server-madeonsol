@@ -3,8 +3,8 @@ name: Publish to MCP Registry
 # Publishes server.json to registry.modelcontextprotocol.io.
 # The npm package (mcp-server-madeonsol) is published separately via the main
 # release flow, so this workflow only does the MCP-registry publish step.
-# Auth is GitHub OIDC — no secrets needed; the io.github.lambopoewert/* namespace
-# is verified automatically because this workflow runs in LamboPoewert's repo.
+# Auth is GitHub OIDC — no secrets needed; the io.github.madeonsol/* namespace
+# is verified automatically because this workflow runs in madeonsol's repo.
 
 on:
   workflow_dispatch: {}

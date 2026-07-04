@@ -1,11 +1,11 @@
 {
   "name": "mcp-server-madeonsol",
-  "maintainers": ["LamboPoewert"],
+  "maintainers": ["madeonsol"],
   "display_name": "MadeOnSol — Solana memecoin intelligence",
   "description": "Real-time Solana memecoin trading intelligence — track 1,000+ KOL wallets with <3s latency, score 15,500+ Pump.fun deployers, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 14 programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day; auth via msk_ API key or x402 micropayments.",
   "version": "1.16.0",
   "homepage": "https://madeonsol.com/solana-api",
-  "repository": "https://github.com/LamboPoewert/mcp-server-madeonsol",
+  "repository": "https://github.com/madeonsol/mcp-server-madeonsol",
   "license": "MIT",
   "categories": ["blockchain", "finance", "web3"],
   "tags": [

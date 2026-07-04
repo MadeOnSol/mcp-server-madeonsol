@@ -3,11 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/mcp-server-madeonsol?style=flat-square)](https://www.npmjs.com/package/mcp-server-madeonsol)
 [![npm downloads](https://img.shields.io/npm/dm/mcp-server-madeonsol?style=flat-square)](https://www.npmjs.com/package/mcp-server-madeonsol)
 [![Smithery](https://img.shields.io/badge/Smithery-listed-blueviolet?style=flat-square)](https://smithery.ai/servers/madeonsol/solana-kol-intelligence)
-[![Glama](https://glama.ai/mcp/servers/LamboPoewert/mcp-server-madeonsol/badges/score.svg)](https://glama.ai/mcp/servers/LamboPoewert/mcp-server-madeonsol)
+[![Glama](https://glama.ai/mcp/servers/madeonsol/mcp-server-madeonsol/badges/score.svg)](https://glama.ai/mcp/servers/madeonsol/mcp-server-madeonsol)
 [![MCP](https://img.shields.io/badge/MCP-compatible-blueviolet?style=flat-square)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-> ⚡ **[Install via Smithery](#install-via-smithery-one-line)** · 🤖 **[Use in Claude Desktop](#claude-desktop)** · 🖱️ **[Use in Cursor](#cursor)** · 📚 **[API docs](https://madeonsol.com/api-docs)** · 💰 **[Free API key](https://madeonsol.com/pricing)** · 🔎 **[On Glama](https://glama.ai/mcp/servers/LamboPoewert/mcp-server-madeonsol)**
+> ⚡ **[Install via Smithery](#install-via-smithery-one-line)** · 🤖 **[Use in Claude Desktop](#claude-desktop)** · 🖱️ **[Use in Cursor](#cursor)** · 📚 **[API docs](https://madeonsol.com/api-docs)** · 💰 **[Free API key](https://madeonsol.com/pricing)** · 🔎 **[On Glama](https://glama.ai/mcp/servers/madeonsol/mcp-server-madeonsol)**
 
 MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. Use from Claude Desktop, Cursor, or any MCP-compatible client.
 

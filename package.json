@@ -1,7 +1,7 @@
 {
   "name": "mcp-server-madeonsol",
-  "version": "1.16.2",
-  "mcpName": "io.github.LamboPoewert/madeonsol",
+  "version": "1.16.3",
+  "mcpName": "io.github.madeonsol/madeonsol",
   "description": "MCP server for MadeOnSol Solana KOL intelligence API — use from Claude, Cursor, or any MCP client",
   "type": "module",
   "bin": {
@@ -47,7 +47,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LamboPoewert/mcp-server-madeonsol"
+    "url": "https://github.com/madeonsol/mcp-server-madeonsol"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

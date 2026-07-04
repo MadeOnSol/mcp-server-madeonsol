@@ -1518,7 +1518,7 @@ async function main() {
             { name: "madeonsol_signal_performance", description: "Signal performance stats for a named signal — hit rate, sample size, median outcome, confidence window." },
           ],
           homepage: "https://madeonsol.com/solana-api",
-          repository: "https://github.com/LamboPoewert/mcp-server-madeonsol",
+          repository: "https://github.com/madeonsol/mcp-server-madeonsol",
         }));
         return;
       }
