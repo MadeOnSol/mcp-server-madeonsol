@@ -33,7 +33,7 @@ export function rewritePath(path, mode) {
         ? path
         : path.replace("/api/x402/", "/api/v1/");
 }
-const UA = "mcp-server-madeonsol/1.16.0";
+const UA = "mcp-server-madeonsol/1.17.0";
 function apiKeyHeaders() {
     const h = { "User-Agent": UA };
     if (authMode === "madeonsol") {
@@ -597,6 +597,9 @@ function registerTools(server) {
         }));
         server.tool("madeonsol_token_risk", "Transparent 0–100 token rug-risk/safety score (higher = riskier). Returns a band (safe/caution/danger), an explainable factors[] array (mint authority, freeze authority, liquidity, transfer fee, token-2022, burn, launch cohort, deployer bond rate, KOL signal, blacklist) each with status/points/detail, and the raw inputs that produced the score. PRO/ULTRA only — BASIC receives HTTP 403.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
             content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/risk`) }],
+        }));
+        server.tool("madeonsol_token_bundle", "Bundle-cohort holdings for a token — which same-slot bundle wallets bought it and how much of supply they still hold (held_pct_of_supply). Rug/insider signal. Returns a `bundle` block (wallet_count, bundle_kind atomic_tx/same_slot/none, held_ratio, held_pct_of_supply [the headline — net held / circulating supply, null if unknown], fully_exited, buy_volume, tokens_held) plus a `wallets[]` array (rank, wallet, held_ratio, has_sold, atomic, is_kol). BASIC/TRADER get the bundle block only (empty wallets[]); PRO adds top-10 flags-only wallets; ULTRA returns the full cohort with enriched identities (kol_name, win_rate, bot_confidence, tokens_held).", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
+            content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/bundle`) }],
         }));
         server.tool("madeonsol_token_candles", "Historical OHLCV price candles for a token, aggregated from the on-chain trade firehose. Each candle carries t/open/high/low/close/volume_usd/trades/market_cap_usd. Timeframes: 1m/5m/15m/1h/4h/1d. PRO=OHLCV, last 30 days only. ULTRA adds buy/sell volume + count splits, net flow, MEV volume, open/close liquidity, high/low MC, and full history. PRO/ULTRA only — BASIC receives HTTP 403.", {
             mint: z.string().describe("Token mint address (base58)"),

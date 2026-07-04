@@ -42,7 +42,7 @@ export function rewritePath(path: string, mode: AuthMode): string {
     : path.replace("/api/x402/", "/api/v1/");
 }
 
-const UA = "mcp-server-madeonsol/1.16.0";
+const UA = "mcp-server-madeonsol/1.17.0";
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -841,6 +841,16 @@ function registerTools(server: McpServer) {
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ mint }) => ({
         content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/risk`) }],
+      })
+    );
+
+    server.tool(
+      "madeonsol_token_bundle",
+      "Bundle-cohort holdings for a token — which same-slot bundle wallets bought it and how much of supply they still hold (held_pct_of_supply). Rug/insider signal. Returns a `bundle` block (wallet_count, bundle_kind atomic_tx/same_slot/none, held_ratio, held_pct_of_supply [the headline — net held / circulating supply, null if unknown], fully_exited, buy_volume, tokens_held) plus a `wallets[]` array (rank, wallet, held_ratio, has_sold, atomic, is_kol). BASIC/TRADER get the bundle block only (empty wallets[]); PRO adds top-10 flags-only wallets; ULTRA returns the full cohort with enriched identities (kol_name, win_rate, bot_confidence, tokens_held).",
+      { mint: z.string().describe("Token mint address (base58)") },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint }) => ({
+        content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/bundle`) }],
       })
     );
 
