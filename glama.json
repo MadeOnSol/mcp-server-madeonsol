@@ -84,7 +84,6 @@
     { "name": "madeonsol_stream_sessions_list", "description": "List live WebSocket streaming sessions — id, service, tier, channels, connected_at, messages_sent (Pro/Ultra)." },
     { "name": "madeonsol_stream_session_kill", "description": "Evict a live WebSocket streaming session by id — frees its connection slot (Pro/Ultra)." },
     { "name": "madeonsol_me", "description": "Account/quota introspection — tier, remaining requests, per-feature usage." },
-    { "name": "madeonsol_signal_performance", "description": "Signal performance stats for a named signal — hit rate by bucket, lift over base, sample size, confidence window. Supported: dump_cluster_count, runner_rate." },
     { "name": "madeonsol_discovery", "description": "List all available endpoints with x402 prices (free, no auth)." }
   ],
   "transports": ["stdio", "http"],
