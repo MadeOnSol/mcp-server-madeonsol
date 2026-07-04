@@ -568,7 +568,7 @@ function registerTools(server) {
             return { content: [{ type: "text", text }] };
         });
         // ── Alpha wallet intelligence ──
-        server.tool("madeonsol_alpha_leaderboard", "Top statistically profitable early-buyer wallets, scored from 47,000+ early-buyer records. BASIC=25 (truncated), PRO=100, ULTRA=500 + bot signals.", {
+        server.tool("madeonsol_alpha_leaderboard", "Top statistically profitable early-buyer wallets, scored from 25,000+ early-buyer records. BASIC=25 (truncated), PRO=100, ULTRA=500 + bot signals.", {
             period: z.enum(["7d", "30d", "all"]).default("30d").describe("Time window"),
             min_tokens: z.number().min(1).max(20).default(5).describe("Minimum tokens traded by wallet (1-20)"),
             sort: z.enum(["win_rate", "pnl", "roi"]).default("win_rate").describe("Sort axis"),
@@ -957,7 +957,7 @@ async function main() {
                 res.writeHead(200, { "Content-Type": "application/json" });
                 res.end(JSON.stringify({
                     name: "madeonsol",
-                    description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 15,500+ Pump.fun deployers, 47,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
+                    description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 15,500+ Pump.fun deployers, 25,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
                     version: "1.16.0",
                     tools: [
                         { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
@@ -993,7 +993,7 @@ async function main() {
                         { name: "madeonsol_wallet_pnl", description: "Full FIFO cost-basis PnL for any wallet: realized + unrealized, profit factor, drawdown, daily curve, closed + open positions. PRO+." },
                         { name: "madeonsol_wallet_positions", description: "Open positions only for any wallet — lighter slice of /pnl. Live unrealized SOL from mc-tracker. PRO+." },
                         { name: "madeonsol_wallet_trades", description: "Cursor-paginated raw trades for any wallet. Filter by action / token_mint / time window. PRO+." },
-                        { name: "madeonsol_alpha_leaderboard", description: "Top profitable early-buyer wallets — 47,000+ scored. BASIC=25, PRO=100, ULTRA=500." },
+                        { name: "madeonsol_alpha_leaderboard", description: "Top profitable early-buyer wallets — 25,000+ scored. BASIC=25, PRO=100, ULTRA=500." },
                         { name: "madeonsol_alpha_wallet", description: "Full alpha profile + bot signals for one wallet. ULTRA only." },
                         { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
                         { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
