@@ -42,7 +42,7 @@ export function rewritePath(path: string, mode: AuthMode): string {
     : path.replace("/api/x402/", "/api/v1/");
 }
 
-const UA = "mcp-server-madeonsol/1.17.0";
+const UA = "mcp-server-madeonsol/1.17.1";
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -846,7 +846,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_token_bundle",
-      "Bundle-cohort holdings for a token — which same-slot bundle wallets bought it and how much of supply they still hold (held_pct_of_supply). Rug/insider signal. Returns a `bundle` block (wallet_count, bundle_kind atomic_tx/same_slot/none, held_ratio, held_pct_of_supply [the headline — net held / circulating supply, null if unknown], fully_exited, buy_volume, tokens_held) plus a `wallets[]` array (rank, wallet, held_ratio, has_sold, atomic, is_kol). BASIC/TRADER get the bundle block only (empty wallets[]); PRO adds top-10 flags-only wallets; ULTRA returns the full cohort with enriched identities (kol_name, win_rate, bot_confidence, tokens_held).",
+      "Bundle-cohort holdings for a token — which same-slot bundle wallets bought it and how much of supply they still hold (held_pct_of_supply). Rug/insider signal. Returns a `bundle` block (wallet_count, bundle_kind atomic_tx/same_slot/none, held_ratio, held_pct_of_supply [the headline — net held / circulating supply, null if unknown], fully_exited, buy_volume, tokens_held) plus a `wallets[]` array (rank, wallet, held_ratio, has_sold, atomic, is_kol). BASIC get the bundle block only (empty wallets[]); PRO adds top-10 flags-only wallets; ULTRA returns the full cohort with enriched identities (kol_name, win_rate, bot_confidence, tokens_held).",
       { mint: z.string().describe("Token mint address (base58)") },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ mint }) => ({
@@ -1453,7 +1453,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 15,500+ Pump.fun deployers, 25,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.16.0",
+          version: "1.17.1",
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1543,7 +1543,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.16.0" });
+            const server = new McpServer({ name: "madeonsol", version: "1.17.1" });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1585,7 +1585,7 @@ async function main() {
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: "1.16.0" });
+    const server = new McpServer({ name: "madeonsol", version: "1.17.1" });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);
