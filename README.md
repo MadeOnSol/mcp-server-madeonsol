@@ -164,6 +164,7 @@ Add to MCP settings with the same command and env vars.
 |---|---|
 | `madeonsol_deployer_alerts` | Pump.fun deployer launches with KOL enrichment. Filter by tier (elite/good/moderate/rising/cold). ULTRA unlocks full pagination. Each alert's `deployers` now includes `deployer_sol_balance` — the deployer wallet's SOL balance at alert time (null for historical rows). |
 | `madeonsol_deployer_trajectory` | Deployer skill curve — streaks, rolling bond rate, trend — available on all tiers |
+| `madeonsol_deployer_history` | A pump.fun deployer's daily reputation time-series (`bonding_rate`, `recent_bond_rate`, `tier`, `avg_peak_mc` per day) — backtest deployer signals at launch time without look-ahead bias. `limit` 1–365 (default 90) |
 
 ### Deshred Sniper Alerts *(new in 1.10 — Pro/Ultra)*
 
@@ -215,6 +216,7 @@ Scored from 1M+ early-buyer records (wallets seen in the first 20 buyers of Pump
 | `madeonsol_token_buyer_quality` | All | 0–100 buyer-quality score + full breakdown (5-min cached) |
 | `madeonsol_token_risk` | PRO+ | Transparent 0–100 rug-risk/safety score with `band`, explainable `factors[]`, and raw `inputs` |
 | `madeonsol_token_bundle` | All | Bundle-cohort holdings — which same-slot bundle wallets bought a token and how much of supply they still hold (`held_pct_of_supply` headline, plus `bundle_kind`, `held_ratio`, `fully_exited`). BASIC: bundle block only. PRO: top-10 flags. ULTRA: full cohort + identities |
+| `madeonsol_token_pools` | PRO+ | Per-venue liquidity map — every DEX pool a token trades in (pump.fun/PumpSwap/Raydium/Meteora/Orca) with per-pool `liquidity_usd`, `is_active` (live vs parked), plus a `summary` (pool/DEX counts, `total_liquidity_usd`, `primary_pool`, `top_pool_share_pct` concentration) |
 | `madeonsol_tokens_batch_risk` | PRO+ | Bulk rug-risk/safety scoring for up to 50 mints — same shape as `madeonsol_token_risk` + `as_of`. Untracked mints return `{ mint, error: "not_tracked" }` without failing the batch; counts as one request |
 | `madeonsol_token_candles` | PRO+ | Historical OHLCV candles (1m–1d). PRO=OHLCV 30d; ULTRA=+net flow, liquidity delta, MEV volume, full history |
 | `madeonsol_token_flow` | PRO+ | Trade-flow aggregate (organic-vs-fake volume) over a 1h/24h `window` — unique wallets/buyers/sellers, buy/sell counts + SOL, `net_sol`, `trades_per_wallet` wash-trading proxy |

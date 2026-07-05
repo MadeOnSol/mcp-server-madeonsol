@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { VERSION } from "./version.js";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 
@@ -42,7 +43,7 @@ export function rewritePath(path: string, mode: AuthMode): string {
     : path.replace("/api/x402/", "/api/v1/");
 }
 
-const UA = "mcp-server-madeonsol/1.17.1";
+const UA = `mcp-server-madeonsol/${VERSION}`;
 
 function apiKeyHeaders(): Record<string, string> {
   const h: Record<string, string> = { "User-Agent": UA };
@@ -855,6 +856,33 @@ function registerTools(server: McpServer) {
     );
 
     server.tool(
+      "madeonsol_token_pools",
+      "Per-venue liquidity map for a Solana token — every DEX pool it trades in (pump.fun/PumpSwap/Raydium/Meteora/Orca) with per-pool liquidity, live vs parked (is_active), plus a summary (total liquidity, pool/DEX counts, primary/deepest pool, top_pool_share_pct concentration). Shows WHERE liquidity sits and how fragmented it is, vs the single aggregate number from the token endpoint.",
+      { mint: z.string().describe("Token mint address (base58)") },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint }) => ({
+        content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/pools`) }],
+      })
+    );
+
+    server.tool(
+      "madeonsol_deployer_history",
+      "A pump.fun deployer's daily reputation time-series (bonding_rate, recent_bond_rate, tier, avg_peak_mc per day). Lets an agent answer 'was this deployer elite AT THE TIME it launched token X?' — backtest deployer signals without look-ahead bias.",
+      {
+        wallet: z.string().describe("Deployer wallet address (base58)"),
+        limit: z.number().min(1).max(365).default(90).describe("Number of daily snapshots to return (1-365, default 90)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ wallet, limit }) => {
+        const qs = new URLSearchParams();
+        if (limit !== undefined) qs.set("limit", String(limit));
+        const query = qs.toString();
+        const path = `/deployer-hunter/${encodeURIComponent(wallet)}/history${query ? `?${query}` : ""}`;
+        return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
+    );
+
+    server.tool(
       "madeonsol_token_candles",
       "Historical OHLCV price candles for a token, aggregated from the on-chain trade firehose. Each candle carries t/open/high/low/close/volume_usd/trades/market_cap_usd. Timeframes: 1m/5m/15m/1h/4h/1d. PRO=OHLCV, last 30 days only. ULTRA adds buy/sell volume + count splits, net flow, MEV volume, open/close liquidity, high/low MC, and full history. PRO/ULTRA only — BASIC receives HTTP 403.",
       {
@@ -1453,7 +1481,7 @@ async function main() {
         res.end(JSON.stringify({
           name: "madeonsol",
           description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 15,500+ Pump.fun deployers, 25,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
-          version: "1.17.1",
+          version: VERSION,
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
             { name: "madeonsol_kol_coordination", description: "Get KOL convergence signals — tokens multiple KOLs are accumulating." },
@@ -1543,7 +1571,7 @@ async function main() {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: undefined,
             });
-            const server = new McpServer({ name: "madeonsol", version: "1.17.1" });
+            const server = new McpServer({ name: "madeonsol", version: VERSION });
             registerTools(server);
             await server.connect(transport);
           }
@@ -1585,7 +1613,7 @@ async function main() {
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: "1.17.1" });
+    const server = new McpServer({ name: "madeonsol", version: VERSION });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);

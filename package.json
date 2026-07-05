@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-madeonsol",
-  "version": "1.17.1",
+  "version": "1.17.2",
   "mcpName": "io.github.MadeOnSol/madeonsol",
   "description": "MCP server for MadeOnSol Solana KOL intelligence API — use from Claude, Cursor, or any MCP client",
   "type": "module",
@@ -15,6 +15,7 @@
     "glama.json"
   ],
   "scripts": {
+    "prebuild": "node ../gen-version.mjs",
     "build": "tsc",
     "test": "vitest run",
     "preflight": "bash ../../scripts/preflight-publish.sh",
