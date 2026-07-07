@@ -424,6 +424,18 @@ function registerTools(server) {
                 const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
                 return { content: [{ type: "text", text }] };
             });
+            server.tool("madeonsol_wallet_holdings", "Verified CURRENT on-chain holdings for any wallet — reads the wallet's actual SPL + Token-2022 token accounts and SOL balance directly from chain, enriches each with our price/MC/name/symbol, and computes transfer_delta (on-chain amount − trade-derived net position, which exposes non-swap flows: airdrops, insider funding, wallet-hopping). Distinct from madeonsol_wallet_positions (trade-derived FIFO): holdings = what the wallet actually holds right now. Returns { address, sol_balance, holdings[], summary (token_accounts, non_zero, returned, priced, total_value_usd, truncated), verified_at, trade_window_days, cache_hit, ttl_seconds }; each holding: mint, symbol, name, amount, amount_raw, decimals, token_program (spl|token2022), price_usd, value_usd, market_cap_usd, is_bonded, trade_derived_amount, transfer_delta. ULTRA only.", {
+                address: z.string().describe("Solana wallet address (base58)"),
+                limit: z.number().min(1).max(500).default(200).describe("Max holdings to return (1-500, default 200)"),
+                min_value_usd: z.number().min(0).default(0).describe("Only return holdings worth at least this many USD (default 0)"),
+            }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ address, limit, min_value_usd }) => {
+                const url = new URL(`${BASE_URL}/api/v1/wallet/${encodeURIComponent(address)}/holdings`);
+                url.searchParams.set("limit", String(limit));
+                url.searchParams.set("min_value_usd", String(min_value_usd));
+                const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+                const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+                return { content: [{ type: "text", text }] };
+            });
             server.tool("madeonsol_wallet_trades", "Cursor-paginated raw trades for any wallet. Filter by action (buy/sell), specific token_mint, time window via since/until (Unix seconds; default last 90 days). Cursor encodes (block_time, id) for stable DESC pagination — pass next_cursor from the previous response to fetch older trades. Limit 1-500 (default 100). PRO+.", {
                 address: z.string().describe("Solana wallet address (base58)"),
                 limit: z.number().min(1).max(500).default(100).describe("Trades per page (1-500)"),
@@ -450,7 +462,7 @@ function registerTools(server) {
                 return { content: [{ type: "text", text }] };
             });
             console.error("[madeonsol-mcp] Wallet tracker tools enabled");
-            console.error("[madeonsol-mcp] Universal wallet tools enabled (stats / pnl / positions / trades)");
+            console.error("[madeonsol-mcp] Universal wallet tools enabled (stats / pnl / positions / holdings / trades)");
         }
         else {
             console.error("[madeonsol-mcp] Wallet tracker tools disabled (requires MADEONSOL_API_KEY)");

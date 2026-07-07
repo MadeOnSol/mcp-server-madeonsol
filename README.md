@@ -11,8 +11,10 @@
 
 MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. Use from Claude Desktop, Cursor, or any MCP-compatible client.
 
-> Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency, score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), and stream every DEX trade across 9+ programs. Free tier: 200 requests/day, every endpoint — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
+> Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency, score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), verify any wallet's CURRENT on-chain holdings straight from its token accounts, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day, every endpoint — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
 
+> **New in 1.18.0** — **Verified on-chain wallet holdings.** New tool `madeonsol_wallet_holdings` — the wallet's CURRENT holdings read straight from chain: its actual SPL + Token-2022 token accounts and SOL balance, each enriched with our `price_usd` / `value_usd` / `market_cap_usd` / `name` / `symbol` / `is_bonded`, plus `transfer_delta` (on-chain amount − trade-derived net position — exposes non-swap flows like airdrops, insider funding, and wallet-hopping). Distinct from `madeonsol_wallet_positions` (trade-derived FIFO): this is what the wallet *actually* holds right now. Params: `limit` (1–500, default 200), `min_value_usd` (default 0). Returns `{ address, sol_balance, holdings[], summary, verified_at, trade_window_days, cache_hit, ttl_seconds }`. ULTRA only.
+>
 > **New in 1.17.0** — **Bundle-cohort holdings.** New tool `madeonsol_token_bundle` — which same-slot "bundle" wallets bought a token and how much of supply they *still* hold (the incumbents' "current held %" rug/insider signal, from confirmed on-chain data). Returns a `bundle` block (`wallet_count`, `bundle_kind` atomic_tx/same_slot/none, `held_ratio`, `held_pct_of_supply` — the headline, net held / circulating supply, null if unknown — `fully_exited`, `buy_volume`, `tokens_held`) plus a `wallets[]` array (`rank`, `wallet`, `held_ratio`, `has_sold`, `atomic`, `is_kol`). BASIC get the bundle block only (empty `wallets[]`); PRO adds top-10 flags-only wallets; ULTRA returns the full cohort with enriched identities (`kol_name`, `win_rate`, `bot_confidence`, `tokens_held`).
 >
 > **New in 1.16.0** — **Batch risk scoring + live stream-session control.** New tool `madeonsol_tokens_batch_risk` — bulk rug-risk/safety scoring for up to 50 mints in one call, returning the same per-mint shape as `madeonsol_token_risk` (0–100 score, `band`, explainable `factors[]`, raw `inputs`) plus an `as_of` timestamp; untracked mints come back as `{ mint, error: "not_tracked" }` without failing the batch, and the whole call counts as one request against quota. Plus two WebSocket session tools: `madeonsol_stream_sessions_list` (list your live sessions — `id`, `service`, `tier`, `channels`, `connected_at`, `remote_ip`, `messages_sent`) and `madeonsol_stream_session_kill` (force-disconnect a session by id to free its connection slot, e.g. a ghost socket). PRO/ULTRA only.
@@ -192,6 +194,7 @@ Pre-confirm pump.fun deploy feed reconstructed from shred-level (**deshred**) da
 | `madeonsol_wallet_stats` | Aggregate 90d stats + cross-product flags (is_kol, is_alpha_tracked + bot_confidence + win_rate + net_pnl, is_deployer + tokens_deployed) — quick sizing-up of an unknown wallet |
 | `madeonsol_wallet_pnl` | Full FIFO cost-basis PnL: realized + unrealized SOL, profit factor, max drawdown, avg + median hold minutes, daily UTC PnL curve, closed + open positions hydrated with live mc-tracker prices |
 | `madeonsol_wallet_positions` | Open positions only — lighter slice of /pnl. Shares the same cache. |
+| `madeonsol_wallet_holdings` | **New 1.18** · Verified CURRENT on-chain holdings (real SPL + Token-2022 accounts + SOL) enriched with price/MC/name, plus `transfer_delta` vs trade-derived position. ULTRA only. |
 | `madeonsol_wallet_trades` | Cursor-paginated raw trades with action / token / since-until filters |
 
 Cached server-side with dynamic TTL (5min / 1h / 24h based on last activity). Cost basis observable only inside the 90-day window.
@@ -316,6 +319,8 @@ CRUD for token dip/recovery price alerts. Fires when a token's market cap crosse
 | ULTRA | €131/mo (€1310/yr) ≈ $149 | 100 + WS events | 100,000 |
 
 Free tier returns the full REST response shape on every endpoint — real wallets, TX signatures, full precision. Paid tiers unlock webhooks, WebSockets, rule engines, and ULTRA-only data depth. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
+
+New customers get a 5-day free trial of Pro or Ultra when you pay by card — full access, nothing charged during the trial, cancel anytime. Start at https://madeonsol.com/pricing
 
 ## Also Available
 
