@@ -1,13 +1,19 @@
 {
   "name": "mcp-server-madeonsol",
-  "maintainers": ["madeonsol"],
+  "maintainers": [
+    "madeonsol"
+  ],
   "display_name": "MadeOnSol — Solana memecoin intelligence",
   "description": "Real-time Solana memecoin trading intelligence — track 1,000+ KOL wallets with <3s latency, score 15,500+ Pump.fun deployers, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 14 programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day; auth via msk_ API key or x402 micropayments.",
-  "version": "1.16.0",
+  "version": "1.19.0",
   "homepage": "https://madeonsol.com/solana-api",
   "repository": "https://github.com/madeonsol/mcp-server-madeonsol",
   "license": "MIT",
-  "categories": ["blockchain", "finance", "web3"],
+  "categories": [
+    "blockchain",
+    "finance",
+    "web3"
+  ],
   "tags": [
     "mcp",
     "claude",
@@ -30,62 +36,238 @@
     "api"
   ],
   "tools": [
-    { "name": "madeonsol_kol_feed", "description": "Real-time Solana KOL trade feed from 1,000+ tracked wallets." },
-    { "name": "madeonsol_kol_coordination", "description": "Multi-KOL convergence with 0-100 score, peak-density window, exits." },
-    { "name": "madeonsol_kol_first_touches", "description": "First-KOL-touch events — backtested scout signal, filter by tier S/A/B/C." },
-    { "name": "madeonsol_kol_leaderboard", "description": "KOL PnL + win-rate rankings over today, 7d, 30d, 90d, 180d." },
-    { "name": "madeonsol_kol_pairs", "description": "KOL affinity matrix — which KOLs co-trade the same tokens." },
-    { "name": "madeonsol_kol_hot_tokens", "description": "KOL momentum tokens — accelerating buy interest." },
-    { "name": "madeonsol_kol_trending_tokens", "description": "Tokens ranked by KOL buy volume across 5m–12h windows." },
-    { "name": "madeonsol_kol_token_entry_order", "description": "Ranked KOL first-buyers for a specific token." },
-    { "name": "madeonsol_kol_compare_wallets", "description": "Side-by-side comparison of 2-5 KOL wallets with overlap analysis." },
-    { "name": "madeonsol_kol_alerts_recent", "description": "Unified live KOL alert feed: clusters, fresh buys, heating-up wallets." },
-    { "name": "madeonsol_kol_pnl", "description": "Deep per-wallet PnL: equity curve, risk metrics, closed + open positions." },
-    { "name": "madeonsol_kol_timing", "description": "KOL entry/exit timing profile — average hold, win rate by hour." },
-    { "name": "madeonsol_deployer_alerts", "description": "Pump.fun deployer alerts with KOL enrichment, filter by tier." },
-    { "name": "madeonsol_deployer_trajectory", "description": "Deployer skill curve — streaks, rolling bond rate, trend." },
-    { "name": "madeonsol_alpha_leaderboard", "description": "Top profitable early-buyer wallets — 25,000+ scored, up to 500 on ULTRA." },
-    { "name": "madeonsol_alpha_wallet", "description": "Full alpha profile + bot-signal flags for one wallet." },
-    { "name": "madeonsol_alpha_linked", "description": "Behaviorally linked wallets (co-bought 3+ tokens within 2s)." },
-    { "name": "madeonsol_tokens_list", "description": "Filtered token directory — MC band, liquidity, MEV-share, velocity, primary DEX, authority flags, momentum/trending sorts." },
-    { "name": "madeonsol_almost_bonded", "description": "Pre-bond pump.fun tokens near graduation, ranked by velocity (Δprogress/min) — progress, eta, stalled, deployer tier." },
-    { "name": "madeonsol_token_get", "description": "Single token detail — MC, holders, velocity, MEV-share, history age." },
-    { "name": "madeonsol_token_batch", "description": "Bulk token detail fetch — up to 50 mints per call." },
-    { "name": "madeonsol_token_cap_table", "description": "First non-deployer early buyers for a token, enriched with PnL/KOL/bot flags." },
-    { "name": "madeonsol_token_buyer_quality", "description": "0-100 buyer-quality score for a token's first-buyer cohort." },
-    { "name": "madeonsol_tokens_batch_buyer_quality", "description": "Bulk buyer-quality scoring — up to 50 mints per call." },
-    { "name": "madeonsol_tokens_batch_risk", "description": "Bulk rug-risk/safety scoring — up to 50 mints per call, same shape as madeonsol_token_risk + as_of; untracked mints don't fail the batch." },
-    { "name": "madeonsol_wallet_tracker_watchlist", "description": "List tracked wallets and remaining capacity (Free 10 / Pro 50 / Ultra 100)." },
-    { "name": "madeonsol_wallet_tracker_add", "description": "Add a wallet to your watchlist with optional label." },
-    { "name": "madeonsol_wallet_tracker_remove", "description": "Remove a wallet from your watchlist." },
-    { "name": "madeonsol_wallet_tracker_trades", "description": "Historical swap/transfer events for watched wallets (120-day retention)." },
-    { "name": "madeonsol_wallet_tracker_summary", "description": "Per-wallet stats: swap counts, SOL bought/sold, last event." },
-    { "name": "madeonsol_copytrade_list", "description": "List your copy-trade rules." },
-    { "name": "madeonsol_copytrade_create", "description": "Create a copy-trade rule with webhook + WS delivery (HMAC-signed)." },
-    { "name": "madeonsol_copytrade_get", "description": "Get one copy-trade rule." },
-    { "name": "madeonsol_copytrade_update", "description": "Update or toggle a copy-trade rule." },
-    { "name": "madeonsol_copytrade_delete", "description": "Delete a copy-trade rule." },
-    { "name": "madeonsol_copytrade_signals", "description": "Recent fired copy-trade signals (up to 7 days, 1-500)." },
-    { "name": "madeonsol_coordination_alerts_list", "description": "List your KOL coordination alert rules (PRO=5, ULTRA=20)." },
-    { "name": "madeonsol_coordination_alerts_create", "description": "Create a coordination alert rule — pg_notify push, sub-second delivery." },
-    { "name": "madeonsol_coordination_alerts_get", "description": "Get one coordination alert rule." },
-    { "name": "madeonsol_coordination_alerts_update", "description": "Update or toggle a coordination alert rule." },
-    { "name": "madeonsol_coordination_alerts_delete", "description": "Delete a coordination alert rule." },
-    { "name": "madeonsol_first_touch_subscriptions_list", "description": "List your first-touch webhook subscriptions (ULTRA, up to 10)." },
-    { "name": "madeonsol_first_touch_subscriptions_create", "description": "Create a first-touch webhook subscription — push on every S-tier scout buy." },
-    { "name": "madeonsol_first_touch_subscriptions_get", "description": "Get one first-touch subscription." },
-    { "name": "madeonsol_first_touch_subscriptions_update", "description": "Update or toggle a first-touch subscription." },
-    { "name": "madeonsol_first_touch_subscriptions_delete", "description": "Delete a first-touch subscription." },
-    { "name": "madeonsol_create_webhook", "description": "Register a webhook for real-time push notifications (PRO/ULTRA)." },
-    { "name": "madeonsol_list_webhooks", "description": "List your registered webhooks (PRO/ULTRA)." },
-    { "name": "madeonsol_delete_webhook", "description": "Delete a webhook by ID (PRO/ULTRA)." },
-    { "name": "madeonsol_test_webhook", "description": "Send a test payload to verify a webhook (PRO/ULTRA)." },
-    { "name": "madeonsol_stream_token", "description": "Issue a 24h WebSocket streaming token (Pro/Ultra). Includes dex_ws_url on ULTRA." },
-    { "name": "madeonsol_stream_sessions_list", "description": "List live WebSocket streaming sessions — id, service, tier, channels, connected_at, messages_sent (Pro/Ultra)." },
-    { "name": "madeonsol_stream_session_kill", "description": "Evict a live WebSocket streaming session by id — frees its connection slot (Pro/Ultra)." },
-    { "name": "madeonsol_me", "description": "Account/quota introspection — tier, remaining requests, per-feature usage." },
-    { "name": "madeonsol_discovery", "description": "List all available endpoints with x402 prices (free, no auth)." }
+    {
+      "name": "madeonsol_kol_feed",
+      "description": "Real-time Solana KOL trade feed from 1,000+ tracked wallets."
+    },
+    {
+      "name": "madeonsol_kol_coordination",
+      "description": "Multi-KOL convergence with 0-100 score, peak-density window, exits."
+    },
+    {
+      "name": "madeonsol_kol_first_touches",
+      "description": "First-KOL-touch events — backtested scout signal, filter by tier S/A/B/C."
+    },
+    {
+      "name": "madeonsol_kol_leaderboard",
+      "description": "KOL PnL + win-rate rankings over today, 7d, 30d, 90d, 180d."
+    },
+    {
+      "name": "madeonsol_kol_pairs",
+      "description": "KOL affinity matrix — which KOLs co-trade the same tokens."
+    },
+    {
+      "name": "madeonsol_kol_hot_tokens",
+      "description": "KOL momentum tokens — accelerating buy interest."
+    },
+    {
+      "name": "madeonsol_kol_trending_tokens",
+      "description": "Tokens ranked by KOL buy volume across 5m–12h windows."
+    },
+    {
+      "name": "madeonsol_kol_token_entry_order",
+      "description": "Ranked KOL first-buyers for a specific token."
+    },
+    {
+      "name": "madeonsol_kol_compare_wallets",
+      "description": "Side-by-side comparison of 2-5 KOL wallets with overlap analysis."
+    },
+    {
+      "name": "madeonsol_kol_alerts_recent",
+      "description": "Unified live KOL alert feed: clusters, fresh buys, heating-up wallets."
+    },
+    {
+      "name": "madeonsol_kol_pnl",
+      "description": "Deep per-wallet PnL: equity curve, risk metrics, closed + open positions."
+    },
+    {
+      "name": "madeonsol_kol_timing",
+      "description": "KOL entry/exit timing profile — average hold, win rate by hour."
+    },
+    {
+      "name": "madeonsol_deployer_alerts",
+      "description": "Pump.fun deployer alerts with KOL enrichment, filter by tier."
+    },
+    {
+      "name": "madeonsol_deployer_trajectory",
+      "description": "Deployer skill curve — streaks, rolling bond rate, trend."
+    },
+    {
+      "name": "madeonsol_alpha_leaderboard",
+      "description": "Top profitable early-buyer wallets — 25,000+ scored, up to 500 on ULTRA."
+    },
+    {
+      "name": "madeonsol_alpha_wallet",
+      "description": "Full alpha profile + bot-signal flags for one wallet."
+    },
+    {
+      "name": "madeonsol_alpha_linked",
+      "description": "Behaviorally linked wallets (co-bought 3+ tokens within 2s)."
+    },
+    {
+      "name": "madeonsol_tokens_list",
+      "description": "Filtered token directory — MC band, liquidity, MEV-share, velocity, primary DEX, authority flags, momentum/trending sorts."
+    },
+    {
+      "name": "madeonsol_almost_bonded",
+      "description": "Pre-bond pump.fun tokens near graduation, ranked by velocity (Δprogress/min) — progress, eta, stalled, deployer tier."
+    },
+    {
+      "name": "madeonsol_token_get",
+      "description": "Single token detail — MC, holders, velocity, MEV-share, history age."
+    },
+    {
+      "name": "madeonsol_token_batch",
+      "description": "Bulk token detail fetch — up to 50 mints per call."
+    },
+    {
+      "name": "madeonsol_token_cap_table",
+      "description": "First non-deployer early buyers for a token, enriched with PnL/KOL/bot flags."
+    },
+    {
+      "name": "madeonsol_token_buyer_quality",
+      "description": "0-100 buyer-quality score for a token's first-buyer cohort."
+    },
+    {
+      "name": "madeonsol_tokens_batch_buyer_quality",
+      "description": "Bulk buyer-quality scoring — up to 50 mints per call."
+    },
+    {
+      "name": "madeonsol_tokens_batch_risk",
+      "description": "Bulk rug-risk/safety scoring — up to 50 mints per call, same shape as madeonsol_token_risk + as_of; untracked mints don't fail the batch."
+    },
+    {
+      "name": "madeonsol_token_trades",
+      "description": "Mint-scoped trade tape — cursor-paginated raw trades for one token, full history from 2026-04-12, pump.fun-pipeline scoped. PRO+."
+    },
+    {
+      "name": "madeonsol_wallet_tracker_watchlist",
+      "description": "List tracked wallets and remaining capacity (Free 10 / Pro 50 / Ultra 100)."
+    },
+    {
+      "name": "madeonsol_wallet_tracker_add",
+      "description": "Add a wallet to your watchlist with optional label."
+    },
+    {
+      "name": "madeonsol_wallet_tracker_remove",
+      "description": "Remove a wallet from your watchlist."
+    },
+    {
+      "name": "madeonsol_wallet_tracker_trades",
+      "description": "Historical swap/transfer events for watched wallets (120-day retention)."
+    },
+    {
+      "name": "madeonsol_wallet_tracker_summary",
+      "description": "Per-wallet stats: swap counts, SOL bought/sold, last event."
+    },
+    {
+      "name": "madeonsol_wallet_batch_classify",
+      "description": "Bulk reputation flags for 1-100 wallets in one call — is_sniper/is_bundler/is_dumper/is_kol, bot_confidence (none/low/medium/high), dump_cluster cohorts. PRO+."
+    },
+    {
+      "name": "madeonsol_copytrade_list",
+      "description": "List your copy-trade rules."
+    },
+    {
+      "name": "madeonsol_copytrade_create",
+      "description": "Create a copy-trade rule with webhook + WS delivery (HMAC-signed)."
+    },
+    {
+      "name": "madeonsol_copytrade_get",
+      "description": "Get one copy-trade rule."
+    },
+    {
+      "name": "madeonsol_copytrade_update",
+      "description": "Update or toggle a copy-trade rule."
+    },
+    {
+      "name": "madeonsol_copytrade_delete",
+      "description": "Delete a copy-trade rule."
+    },
+    {
+      "name": "madeonsol_copytrade_signals",
+      "description": "Recent fired copy-trade signals (up to 7 days, 1-500)."
+    },
+    {
+      "name": "madeonsol_coordination_alerts_list",
+      "description": "List your KOL coordination alert rules (PRO=5, ULTRA=20)."
+    },
+    {
+      "name": "madeonsol_coordination_alerts_create",
+      "description": "Create a coordination alert rule — pg_notify push, sub-second delivery."
+    },
+    {
+      "name": "madeonsol_coordination_alerts_get",
+      "description": "Get one coordination alert rule."
+    },
+    {
+      "name": "madeonsol_coordination_alerts_update",
+      "description": "Update or toggle a coordination alert rule."
+    },
+    {
+      "name": "madeonsol_coordination_alerts_delete",
+      "description": "Delete a coordination alert rule."
+    },
+    {
+      "name": "madeonsol_first_touch_subscriptions_list",
+      "description": "List your first-touch webhook subscriptions (ULTRA, up to 10)."
+    },
+    {
+      "name": "madeonsol_first_touch_subscriptions_create",
+      "description": "Create a first-touch webhook subscription — push on every S-tier scout buy."
+    },
+    {
+      "name": "madeonsol_first_touch_subscriptions_get",
+      "description": "Get one first-touch subscription."
+    },
+    {
+      "name": "madeonsol_first_touch_subscriptions_update",
+      "description": "Update or toggle a first-touch subscription."
+    },
+    {
+      "name": "madeonsol_first_touch_subscriptions_delete",
+      "description": "Delete a first-touch subscription."
+    },
+    {
+      "name": "madeonsol_create_webhook",
+      "description": "Register a webhook for real-time push notifications (PRO/ULTRA)."
+    },
+    {
+      "name": "madeonsol_list_webhooks",
+      "description": "List your registered webhooks (PRO/ULTRA)."
+    },
+    {
+      "name": "madeonsol_delete_webhook",
+      "description": "Delete a webhook by ID (PRO/ULTRA)."
+    },
+    {
+      "name": "madeonsol_test_webhook",
+      "description": "Send a test payload to verify a webhook (PRO/ULTRA)."
+    },
+    {
+      "name": "madeonsol_stream_token",
+      "description": "Issue a 24h WebSocket streaming token (Pro/Ultra). Includes dex_ws_url on ULTRA."
+    },
+    {
+      "name": "madeonsol_stream_sessions_list",
+      "description": "List live WebSocket streaming sessions — id, service, tier, channels, connected_at, messages_sent (Pro/Ultra)."
+    },
+    {
+      "name": "madeonsol_stream_session_kill",
+      "description": "Evict a live WebSocket streaming session by id — frees its connection slot (Pro/Ultra)."
+    },
+    {
+      "name": "madeonsol_me",
+      "description": "Account/quota introspection — tier, remaining requests, per-feature usage."
+    },
+    {
+      "name": "madeonsol_discovery",
+      "description": "List all available endpoints with x402 prices (free, no auth)."
+    }
   ],
-  "transports": ["stdio", "http"],
+  "transports": [
+    "stdio",
+    "http"
+  ],
   "runtime": "node"
 }

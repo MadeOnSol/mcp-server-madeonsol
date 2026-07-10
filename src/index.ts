@@ -244,20 +244,14 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_deployer_trajectory",
-    "Deployer skill curve — streaks, rolling bond rate, improvement trend, and deployment cadence for a Pump.fun deployer.",
+    "Deployer skill curve — streaks, rolling bond rate, improvement trend, and deployment cadence for a Pump.fun deployer. Works with an msk_ key (Pro/Ultra) or keyless via x402 ($0.01/call).",
     {
       wallet: z.string().describe("Deployer wallet address (base58)"),
     },
     readOnlyAnnotations,
-    async ({ wallet }) => {
-      if (authMode === "madeonsol") {
-        const headers: Record<string, string> = { ...apiKeyHeaders() };
-        const res = await fetch(`${BASE_URL}/api/v1/deployer-hunter/${wallet}/trajectory`, { headers });
-        if (!res.ok) { const body = await res.text().catch(() => ""); return { content: [{ type: "text" as const, text: `Error ${res.status}: ${body}` }] }; }
-        return { content: [{ type: "text" as const, text: JSON.stringify(await res.json(), null, 2) }] };
-      }
-      return { content: [{ type: "text" as const, text: "Deployer trajectory requires MADEONSOL_API_KEY (msk_, Pro/Ultra) — get one at madeonsol.com/pricing." }] };
-    }
+    async ({ wallet }) => ({
+      content: [{ type: "text" as const, text: await query(`/api/x402/deployer-hunter/${encodeURIComponent(wallet)}/trajectory`) }],
+    })
   );
 
   server.tool(
@@ -357,25 +351,22 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_sniper_recent",
-    "Deshred pre-confirm pump.fun deploy feed — new launches surface ~500ms before they confirm on-chain (reconstructed from shred-level data). PRO sees elite/good deployers; ULTRA sees every tier. Requires a Pro/Ultra msk_ API key.",
+    "Deshred pre-confirm pump.fun deploy feed — new launches surface ~500ms before they confirm on-chain (reconstructed from shred-level data). Each deploy now carries footprint — the slot-window snipe rollup ({ buys, buyers, sol, supply_pct|null, sniper_wallet_buys, data_available, as_of } | null; buys in slots deploy-1..deploy+3). footprint is null for deploys younger than the ~10-min settle window or outside the trade-pipeline write-gate — absent, not zero. PRO (msk_ key) sees elite/good deployers; ULTRA sees every tier; also callable keyless via x402 ($0.01/call, elite/good scope).",
     {
       deployer_tier: z.enum(["elite", "good", "moderate", "rising", "cold", "unranked"]).optional().describe("Filter by deployer reputation tier (ULTRA)"),
       min_bond_rate: z.number().min(0).max(1).optional().describe("Minimum deployer lifetime bond rate (0-1)"),
       since: z.string().optional().describe("ISO-8601 — only deploys detected after this timestamp"),
-      watchlist: z.boolean().optional().describe("ULTRA: narrow to your custom deployer watchlist (any tier)"),
+      watchlist: z.boolean().optional().describe("ULTRA (msk_ key only): narrow to your custom deployer watchlist (any tier)"),
       limit: z.number().min(1).max(200).default(50).describe("Max results"),
     },
     readOnlyAnnotations,
     async ({ deployer_tier, min_bond_rate, since, watchlist, limit }) => {
-      if (authMode !== "madeonsol") return { content: [{ type: "text" as const, text: "Sniper feed requires MADEONSOL_API_KEY (msk_, Pro/Ultra) — get one at madeonsol.com/pricing." }] };
-      const qs = new URLSearchParams({ limit: String(limit) });
-      if (deployer_tier) qs.set("deployer_tier", deployer_tier);
-      if (min_bond_rate != null) qs.set("min_bond_rate", String(min_bond_rate));
-      if (since) qs.set("since", since);
-      if (watchlist) qs.set("watchlist", "true");
-      const res = await fetch(`${BASE_URL}/api/v1/sniper/recent?${qs}`, { headers: apiKeyHeaders() });
-      if (!res.ok) { const body = await res.text().catch(() => ""); return { content: [{ type: "text" as const, text: `Error ${res.status}: ${body}` }] }; }
-      return { content: [{ type: "text" as const, text: JSON.stringify(await res.json(), null, 2) }] };
+      const params: Record<string, string | number> = { limit };
+      if (deployer_tier) params.deployer_tier = deployer_tier;
+      if (min_bond_rate != null) params.min_bond_rate = min_bond_rate;
+      if (since) params.since = since;
+      if (watchlist) params.watchlist = "true";
+      return { content: [{ type: "text" as const, text: await query("/api/x402/sniper/recent", params) }] };
     }
   );
 
@@ -397,7 +388,7 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_discovery",
-    "List all available MadeOnSol API endpoints with prices and parameter docs. Free, no auth required.",
+    "List all available MadeOnSol API endpoints with prices and parameter docs. Free, no auth required. The keyless x402 catalog now covers 25 endpoints — recent additions: token candles ($0.01), almost-bonded ($0.01), top-traders ($0.02), cap-table ($0.02), sniper recent deploys ($0.01), token flow ($0.01), and deployer trajectory ($0.01).",
     {},
     { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     async () => {
@@ -509,7 +500,7 @@ function registerTools(server: McpServer) {
 
       server.tool(
         "madeonsol_wallet_stats",
-        "Aggregate stats for any Solana wallet over the last 90 days plus cross-product flags (is_kol, is_alpha_tracked with bot_confidence + win_rate + net_pnl, is_deployer with tokens_deployed + bonding_rate). Use this before drilling into PnL to size up an unknown wallet quickly. PRO+.",
+        "Aggregate stats for any Solana wallet over the last 90 days plus cross-product flags (is_kol, is_alpha_tracked with bot_confidence + win_rate + net_pnl, is_deployer with tokens_deployed + bonding_rate). flags now also carries reputation flags — is_sniper, is_bundler, is_dumper — plus a dump_cluster block ({ dump_cohorts, runner_cohorts, total_cohorts, as_of } | null). bot_confidence is a string enum 'none'|'low'|'medium'|'high' (null when not alpha-tracked; earlier versions documented it as a number and it always serialized null — fixed). Scope caveat: reputation flags are pump.fun-pipeline scoped — false = not observed, NOT verified clean; is_bundler is lifetime, is_dumper is a rolling 42d window. Use this before drilling into PnL to size up an unknown wallet quickly. PRO+.",
         {
           address: z.string().describe("Solana wallet address (base58)"),
         },
@@ -601,8 +592,20 @@ function registerTools(server: McpServer) {
         }
       );
 
+      server.tool(
+        "madeonsol_wallet_batch_classify",
+        "Bulk wallet reputation flags for 1-100 wallets in ONE call (counts as one request). Per wallet: is_sniper / is_bundler / is_dumper / is_kol (+ kol_name), bot_confidence (string enum 'none'|'low'|'medium'|'high', null when the wallet isn't alpha-tracked), and dump_cluster ({ dump_cohorts, runner_cohorts, total_cohorts, as_of } | null). Same semantics as the flags block on madeonsol_wallet_stats. IMPORTANT scope caveat: all three reputation flags derive from the pump.fun trade pipeline — false means 'not observed', NOT verified clean. is_sniper is behavior-updated (~12min cron) and can clear if the wallet reforms; is_bundler is a LIFETIME flag (bought >1 token in the same block, ever); is_dumper uses a rolling 42-day window (recomputed daily, up to ~48h stale). Response: { wallets[], count, as_of }. PRO/ULTRA only.",
+        {
+          wallets: z.array(z.string()).min(1).max(100).describe("1-100 base58 Solana wallet addresses"),
+        },
+        { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+        async ({ wallets }) => ({
+          content: [{ type: "text" as const, text: await walletTrackerRequest("POST", "/wallet/batch/classify", { wallets }) }],
+        })
+      );
+
       console.error("[madeonsol-mcp] Wallet tracker tools enabled");
-      console.error("[madeonsol-mcp] Universal wallet tools enabled (stats / pnl / positions / holdings / trades)");
+      console.error("[madeonsol-mcp] Universal wallet tools enabled (stats / pnl / positions / holdings / trades / batch classify)");
     } else {
       console.error("[madeonsol-mcp] Wallet tracker tools disabled (requires MADEONSOL_API_KEY)");
     }
@@ -856,7 +859,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_token_risk",
-      "Transparent 0–100 token rug-risk/safety score (higher = riskier). Returns a band (safe/caution/danger), an explainable factors[] array (mint authority, freeze authority, liquidity, transfer fee, token-2022, burn, launch cohort, deployer bond rate, KOL signal, blacklist) each with status/points/detail, and the raw inputs that produced the score. PRO/ULTRA only — BASIC receives HTTP 403.",
+      "Transparent 0–100 token rug-risk/safety score (higher = riskier). Returns a band (safe/caution/danger), an explainable factors[] array (mint authority, freeze authority, liquidity, transfer fee, token-2022, burn, launch cohort, deployer bond rate, KOL signal, blacklist) each with status/points/detail, and the raw inputs that produced the score. inputs now includes sniper_footprint — the slot-window launch-snipe rollup ({ buys, buyers, sol, supply_pct|null, sniper_wallet_buys, data_available, as_of } | null; buys landing in slots deploy-1..deploy+3). data_available=false means the mint isn't observable in the trade pipeline — NOT zero snipes; null means no rollup yet. PRO/ULTRA only — BASIC receives HTTP 403.",
       { mint: z.string().describe("Token mint address (base58)") },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ mint }) => ({
@@ -938,6 +941,33 @@ function registerTools(server: McpServer) {
         const query = qs.toString();
         const path = `/tokens/${encodeURIComponent(mint)}/flow${query ? `?${query}` : ""}`;
         return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
+    );
+
+    server.tool(
+      "madeonsol_token_trades",
+      "Mint-scoped trade tape — cursor-paginated raw trades for one token, newest first (the backfill/history complement to the live DEX firehose stream). Each trade: tx_signature, wallet_address, action (buy|sell), sol_amount, token_amount, price_sol|null, price_usd|null, early_buyer_rank|null, slot|null, block_time (unix sec), traded_at (ISO). Filters: action, wallet, since/until (unix seconds — defaults to FULL history, not 90d). Pass next_cursor from the previous response to page older trades; has_more tells you when to stop. Coverage honesty: capture starts 2026-04-12 and is pump.fun-pipeline scoped — the response carries coverage.history_start + coverage.scope so agents can reason about gaps. PRO/ULTRA only.",
+      {
+        mint: z.string().describe("Token mint address (base58)"),
+        limit: z.number().min(1).max(500).default(100).describe("Trades per page (1-500, default 100)"),
+        cursor: z.string().optional().describe("Cursor from previous response's next_cursor field"),
+        action: z.enum(["buy", "sell"]).optional().describe("Filter to buys or sells only"),
+        wallet: z.string().optional().describe("Filter to a single wallet address (base58)"),
+        since: z.number().optional().describe("Unix epoch seconds — default full history (2026-04-12 onward)"),
+        until: z.number().optional().describe("Unix epoch seconds — default now"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint, limit, cursor, action, wallet, since, until }) => {
+        const url = new URL(`${BASE_URL}/api/v1/tokens/${encodeURIComponent(mint)}/trades`);
+        url.searchParams.set("limit", String(limit));
+        if (cursor) url.searchParams.set("cursor", cursor);
+        if (action) url.searchParams.set("action", action);
+        if (wallet) url.searchParams.set("wallet", wallet);
+        if (since !== undefined) url.searchParams.set("since", String(since));
+        if (until !== undefined) url.searchParams.set("until", String(until));
+        const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
+        const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
+        return { content: [{ type: "text" as const, text }] };
       }
     );
 
@@ -1531,7 +1561,8 @@ async function main() {
             { name: "madeonsol_wallet_tracker_remove", description: "Remove a wallet from your watchlist." },
             { name: "madeonsol_wallet_tracker_trades", description: "Historical swap/transfer events for watched wallets." },
             { name: "madeonsol_wallet_tracker_summary", description: "Per-wallet stats: swap counts, SOL bought/sold." },
-            { name: "madeonsol_wallet_stats", description: "Aggregate stats + cross-product flags (is_kol/alpha/deployer) for any Solana wallet. PRO+." },
+            { name: "madeonsol_wallet_stats", description: "Aggregate stats + cross-product flags (is_kol/alpha/deployer, is_sniper/is_bundler/is_dumper + dump_cluster) for any Solana wallet. PRO+." },
+            { name: "madeonsol_wallet_batch_classify", description: "Bulk reputation flags for 1-100 wallets in one call — is_sniper/is_bundler/is_dumper/is_kol, bot_confidence, dump_cluster. PRO+." },
             { name: "madeonsol_wallet_pnl", description: "Full FIFO cost-basis PnL for any wallet: realized + unrealized, profit factor, drawdown, daily curve, closed + open positions. PRO+." },
             { name: "madeonsol_wallet_positions", description: "Open positions only for any wallet — lighter slice of /pnl. Live unrealized SOL from mc-tracker. PRO+." },
             { name: "madeonsol_wallet_trades", description: "Cursor-paginated raw trades for any wallet. Filter by action / token_mint / time window. PRO+." },
@@ -1541,6 +1572,7 @@ async function main() {
             { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
             { name: "madeonsol_token_buyer_quality", description: "0–100 buyer quality score for a token's first-buyer cohort." },
             { name: "madeonsol_token_candles", description: "Historical OHLCV price candles (1m–1d). PRO=OHLCV 30d; ULTRA=+net flow, liquidity delta, full history." },
+            { name: "madeonsol_token_trades", description: "Mint-scoped trade tape — cursor-paginated raw trades for one token, full history from 2026-04-12. PRO+." },
             { name: "madeonsol_tokens_batch_buyer_quality", description: "Bulk buyer-quality scoring for up to 50 mints. Shares the LRU cache." },
             { name: "madeonsol_tokens_batch_risk", description: "Bulk rug-risk/safety scoring for up to 50 mints — same shape as madeonsol_token_risk + as_of; untracked mints don't fail the batch. PRO+." },
             { name: "madeonsol_token_get", description: "Comprehensive per-mint snapshot: price, MC, volume, deployer, KOL, age, blacklist." },
