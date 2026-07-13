@@ -859,7 +859,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_token_risk",
-      "Transparent 0–100 token rug-risk/safety score (higher = riskier). Returns a band (safe/caution/danger), an explainable factors[] array (mint authority, freeze authority, liquidity, transfer fee, token-2022, burn, launch cohort, deployer bond rate, KOL signal, blacklist) each with status/points/detail, and the raw inputs that produced the score. inputs now includes sniper_footprint — the slot-window launch-snipe rollup ({ buys, buyers, sol, supply_pct|null, sniper_wallet_buys, data_available, as_of } | null; buys landing in slots deploy-1..deploy+3). data_available=false means the mint isn't observable in the trade pipeline — NOT zero snipes; null means no rollup yet. PRO/ULTRA only — BASIC receives HTTP 403.",
+      "Transparent 0–100 token rug-risk/safety score (higher = riskier). Returns a band (safe/caution/danger), an explainable factors[] array (mint authority, freeze authority, liquidity, transfer fee, token-2022, burn, launch cohort, deployer bond rate, KOL signal, blacklist) each with status/points/detail, and the raw inputs that produced the score. inputs now includes sniper_footprint — the slot-window launch-snipe rollup ({ buys, buyers, sol, supply_pct|null, sniper_wallet_buys, data_available, as_of } | null; buys landing in slots deploy-1..deploy+3). data_available=false means the mint isn't observable in the trade pipeline — NOT zero snipes; null means no rollup yet. Also returns a top-level dev block (deployer self-activity, null when the mint has no deployer-pipeline row): wallet, launchpad, deployed_at, create-tx self-buy snapshot (buy_sol / buy_tokens / buy_supply_pct), post-create rollup (bought_tokens_after — catches the same-second-separate-tx dev buy — sold_tokens, sold_sol, first_sell_at, last_sell_at), LIVE on-chain holdings (holdings_tokens, holdings_supply_pct — pump.fun 1B denominator, null elsewhere — wallet_empty: is the dev wallet empty NOW), and transferred_out (tokens left without a sell; null = unknown, never a guess). PRO/ULTRA only — BASIC receives HTTP 403.",
       { mint: z.string().describe("Token mint address (base58)") },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ mint }) => ({
@@ -885,6 +885,24 @@ function registerTools(server: McpServer) {
       async ({ mint }) => ({
         content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/pools`) }],
       })
+    );
+
+    server.tool(
+      "madeonsol_token_depth",
+      "Per-pool price-impact / slippage for a token — answers 'how much SOL moves this token's price N%' and the impact of each buy size, per pool (NOT router-optimal). Each computable pool returns spot_price_sol, fee_pct, a quotes[] entry per requested SOL size (size_sol, tokens_out, avg_price_sol, price_impact_pct), and to_move_price — the SOL required to move price 1%/5%/10%. Constant-product AMMs are served from stream reserves (source=stream, with reserves_age_ms); pump.fun/bonk bonding curves from a LIVE read of the curve's virtual reserves (source=live_rpc). Pools that can't be priced honestly — concentrated CLMM/Orca/DLMM, Meteora-DBC curves, unclassified models — come back in unsupported_pools[] with a reason (e.g. concentrated_liquidity_depth_not_supported, curve_graduated_use_amm_pool) instead of a wrong number. primary_pool = deepest computable pool; found=false means no pools tracked. PRO/ULTRA only — BASIC receives HTTP 403.",
+      {
+        mint: z.string().describe("Token mint address (base58)"),
+        sizes: z.array(z.number().gt(0).max(10000)).min(1).max(8).optional()
+          .describe("SOL buy sizes to quote (max 8, each >0 and ≤10000). Default [0.5, 1, 5, 10]"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint, sizes }) => {
+        const qs = new URLSearchParams();
+        if (sizes && sizes.length > 0) qs.set("sizes", sizes.join(","));
+        const query = qs.toString();
+        const path = `/tokens/${encodeURIComponent(mint)}/depth${query ? `?${query}` : ""}`;
+        return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
     );
 
     server.tool(
@@ -1571,6 +1589,7 @@ async function main() {
             { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
             { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
             { name: "madeonsol_token_buyer_quality", description: "0–100 buyer quality score for a token's first-buyer cohort." },
+            { name: "madeonsol_token_depth", description: "Per-pool price impact / slippage — quotes per SOL buy size + SOL to move price 1%/5%/10%; unsupported pools flagged with a reason. PRO+." },
             { name: "madeonsol_token_candles", description: "Historical OHLCV price candles (1m–1d). PRO=OHLCV 30d; ULTRA=+net flow, liquidity delta, full history." },
             { name: "madeonsol_token_trades", description: "Mint-scoped trade tape — cursor-paginated raw trades for one token, full history from 2026-04-12. PRO+." },
             { name: "madeonsol_tokens_batch_buyer_quality", description: "Bulk buyer-quality scoring for up to 50 mints. Shares the LRU cache." },

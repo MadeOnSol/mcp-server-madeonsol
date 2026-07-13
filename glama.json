@@ -4,8 +4,8 @@
     "madeonsol"
   ],
   "display_name": "MadeOnSol — Solana memecoin intelligence",
-  "description": "Real-time Solana memecoin trading intelligence — track 1,000+ KOL wallets with <3s latency, score 15,500+ Pump.fun deployers, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 14 programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day; auth via msk_ API key or x402 micropayments.",
-  "version": "1.19.0",
+  "description": "Real-time Solana memecoin trading intelligence — track 1,000+ KOL wallets with <3s latency, score 15,500+ Pump.fun deployers, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 14 programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day, no payment to start; auth via msk_ API key or x402 micropayments. New customers get a 5-day free trial of Pro or Ultra by card — nothing charged during the trial, cancel anytime.",
+  "version": "1.20.0",
   "homepage": "https://madeonsol.com/solana-api",
   "repository": "https://github.com/madeonsol/mcp-server-madeonsol",
   "license": "MIT",
