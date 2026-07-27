@@ -325,6 +325,7 @@ CRUD for token dip/recovery price alerts. Fires when a token's market cap crosse
 | BASIC (free) | $0 | 10 | 200 |
 | PRO | €43/mo (€430/yr) ≈ $49 | 50 | 10,000 |
 | ULTRA | €131/mo (€1310/yr) ≈ $149 | 100 + WS events | 100,000 |
+| BUSINESS | €400/mo (€4000/yr) ≈ $449 | 500 + WS events | 500,000 |
 
 Free tier returns the full REST response shape on every endpoint — real wallets, TX signatures, full precision. Paid tiers unlock webhooks, WebSockets, rule engines, and ULTRA-only data depth. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
 
