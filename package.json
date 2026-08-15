@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-madeonsol",
-  "version": "1.20.3",
+  "version": "1.21.0",
   "mcpName": "io.github.MadeOnSol/madeonsol",
   "description": "MCP server for MadeOnSol Solana KOL intelligence API — use from Claude, Cursor, or any MCP client. Free tier 200 req/day, no payment to start.",
   "type": "module",
@@ -56,11 +56,28 @@
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "@x402/fetch": ">=0.1.0",
-    "@x402/core": ">=0.1.0",
-    "@x402/svm": ">=0.1.0",
-    "@solana/kit": ">=2.0.0",
-    "@scure/base": ">=1.0.0"
+    "@x402/fetch": "^2.8.0",
+    "@x402/core": "^2.8.0",
+    "@x402/svm": "^2.8.0",
+    "@solana/kit": "^5.5.1",
+    "@scure/base": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@x402/fetch": {
+      "optional": true
+    },
+    "@x402/core": {
+      "optional": true
+    },
+    "@x402/svm": {
+      "optional": true
+    },
+    "@solana/kit": {
+      "optional": true
+    },
+    "@scure/base": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^20",

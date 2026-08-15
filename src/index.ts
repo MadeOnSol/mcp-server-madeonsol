@@ -254,6 +254,115 @@ function registerTools(server: McpServer) {
     })
   );
 
+  /* ── Deployer hunter: reputation, leaderboard, outcomes ──
+   * "Bonding" is the pump.fun graduation event. bonding_rate is LIFETIME,
+   * recent_bond_rate is the ROLLING recent window — a deployer can hold a strong
+   * lifetime rate and a collapsing recent one, which is why both are exposed.
+   * runner_rate means nothing until labeled_tokens >= 3. These 7 are key-only
+   * (msk_); they are not on the keyless x402 rail. */
+
+  server.tool(
+    "madeonsol_deployer_stats",
+    "Ecosystem-wide Pump.fun deployer stats — tracked_count (how many deployers we grade), signals_today, bonds_detected, the chain-wide bond_rate, and a per-tier count (elite/good/rising). Use this to size expectations before reading the leaderboard: a bond_rate of ~0.02 chain-wide is what makes an elite deployer's 0.30 meaningful. Requires an msk_ key.",
+    {},
+    readOnlyAnnotations,
+    async () => ({
+      content: [{ type: "text" as const, text: await query("/api/v1/deployer-hunter/stats") }],
+    })
+  );
+
+  server.tool(
+    "madeonsol_deployer_leaderboard",
+    "Pump.fun deployer reputation leaderboard, ranked by bonding rate, recent form, total bonded, or last deploy. Unranked deployers are excluded. IMPORTANT: compare bonding_rate (LIFETIME) against recent_bond_rate (ROLLING) — the gap between them is the signal, not either number alone; a deployer at 0.40 lifetime and 0.05 recent is cooling off. runner_rate (share of labeled tokens that ran rather than dumped) is only meaningful once labeled_tokens >= 3. Requires an msk_ key.",
+    {
+      tier: z.enum(["elite", "good", "rising", "neutral", "spammer", "unranked"]).optional().describe("Restrict to one reputation grade"),
+      sort: z.enum(["bonding_rate", "recent", "total_bonded", "last_deploy"]).default("bonding_rate").describe("Ranking axis"),
+      limit: z.number().min(1).max(100).default(20).describe("Page size (1-100, default 20)"),
+      offset: z.number().min(0).default(0).describe("Pagination offset"),
+    },
+    readOnlyAnnotations,
+    async (args) => {
+      const params: Record<string, string | number> = {};
+      for (const [k, v] of Object.entries(args)) if (v !== undefined) params[k] = v as string | number;
+      return { content: [{ type: "text" as const, text: await query("/api/v1/deployer-hunter/leaderboard", params) }] };
+    }
+  );
+
+  server.tool(
+    "madeonsol_deployer_profile",
+    "One Pump.fun deployer's profile — tier, lifetime bonding_rate, recent_bond_rate, total deployed/bonded, first seen, last deploy, average time-to-bond, and runner_rate. NOTE: an untracked wallet returns a profile with zeroed counters, NOT a 404, so check total_deployed before concluding anything about a wallet. Gate runner_rate on labeled_tokens >= 3. Requires an msk_ key.",
+    {
+      wallet: z.string().describe("Deployer wallet address (base58)"),
+    },
+    readOnlyAnnotations,
+    async ({ wallet }) => ({
+      content: [{ type: "text" as const, text: await query(`/api/v1/deployer-hunter/${encodeURIComponent(wallet)}`) }],
+    })
+  );
+
+  server.tool(
+    "madeonsol_deployer_tokens",
+    "Every token deployed by one Pump.fun wallet, paginated — each row with deployed_at, bonded_at, time-to-bond and peak market cap. Use only_bonded to see just the graduations. Pair with madeonsol_deployer_profile to check whether a deployer's record comes from a few big winners or a consistent rate. Requires an msk_ key.",
+    {
+      wallet: z.string().describe("Deployer wallet address (base58)"),
+      limit: z.number().min(1).max(100).default(50).describe("Page size (1-100, default 50)"),
+      offset: z.number().min(0).default(0).describe("Pagination offset"),
+      only_bonded: z.boolean().default(false).describe("Return only tokens that graduated"),
+    },
+    readOnlyAnnotations,
+    async ({ wallet, ...rest }) => {
+      const params: Record<string, string | number | boolean> = {};
+      for (const [k, v] of Object.entries(rest)) if (v !== undefined) params[k] = v as string | number | boolean;
+      return { content: [{ type: "text" as const, text: await query(`/api/v1/deployer-hunter/${encodeURIComponent(wallet)}/tokens`, params as Record<string, string | number>) }] };
+    }
+  );
+
+  server.tool(
+    "madeonsol_deployer_alert_stats",
+    "Deployer alert volume over a lookback window, with bond-rate and market-cap-multiplier distributions (pct_2x / pct_5x / pct_10x / pct_50x, avg and best) broken out per tier. This is the tool for sizing and monitoring deployer-hunter usage, and for answering 'how often does an elite-tier alert actually 10x?' with a number instead of a guess. Requires an msk_ key.",
+    {
+      period: z.string().optional().describe("Lookback window, e.g. '24h', '7d', '30d'"),
+    },
+    readOnlyAnnotations,
+    async (args) => {
+      const params: Record<string, string | number> = {};
+      for (const [k, v] of Object.entries(args)) if (v !== undefined) params[k] = v as string | number;
+      return { content: [{ type: "text" as const, text: await query("/api/v1/deployer-hunter/alert-stats", params) }] };
+    }
+  );
+
+  server.tool(
+    "madeonsol_deployer_best_tokens",
+    "Best-performing recent tokens launched by RANKED (non-unranked) Pump.fun deployers, by peak market cap multiple over the alert price. Each row carries the deployer wallet and tier alongside mc_at_bond, peak_market_cap and mc_multiplier. Requires an msk_ key.",
+    {
+      period: z.string().default("7d").describe("Lookback window, e.g. '24h', '7d', '30d' (default '7d')"),
+      limit: z.number().min(1).max(100).default(5).describe("Rows to return (default 5)"),
+    },
+    readOnlyAnnotations,
+    async (args) => {
+      const params: Record<string, string | number> = {};
+      for (const [k, v] of Object.entries(args)) if (v !== undefined) params[k] = v as string | number;
+      return { content: [{ type: "text" as const, text: await query("/api/v1/deployer-hunter/best-tokens", params) }] };
+    }
+  );
+
+  server.tool(
+    "madeonsol_deployer_recent_bonds",
+    "Tokens from tracked Pump.fun deployers that just graduated to Raydium, newest first, each with time_to_bond_minutes, mc_at_bond, peak market cap and the full deployer reputation block. POLL INCREMENTALLY: pass the previous response's next_since back as `since` to get only what bonded after it — do not re-fetch the whole window. Requires an msk_ key.",
+    {
+      limit: z.number().min(1).max(100).default(20).describe("Page size (1-100, default 20)"),
+      since: z.string().optional().describe("Incremental cursor — the previous response's next_since"),
+      tier: z.enum(["elite", "good", "rising", "neutral", "spammer", "unranked"]).optional().describe("Restrict to one deployer grade"),
+      peak_mc_min: z.number().min(0).optional().describe("Floor on peak market cap (USD)"),
+    },
+    readOnlyAnnotations,
+    async (args) => {
+      const params: Record<string, string | number> = {};
+      for (const [k, v] of Object.entries(args)) if (v !== undefined) params[k] = v as string | number;
+      return { content: [{ type: "text" as const, text: await query("/api/v1/deployer-hunter/recent-bonds", params) }] };
+    }
+  );
+
   server.tool(
     "madeonsol_kol_hot_tokens",
     "KOL momentum tokens — tokens with accelerating KOL buy interest, early signals before coordination triggers. PRO+ adds buyer-quality filters.",
@@ -1557,6 +1666,13 @@ async function main() {
             { name: "madeonsol_kol_pairs", description: "KOL affinity matrix — which KOLs co-trade the same tokens." },
             { name: "madeonsol_kol_timing", description: "KOL entry/exit timing profile. Pro/Ultra." },
             { name: "madeonsol_deployer_trajectory", description: "Deployer skill curve — streaks, trend. Pro/Ultra." },
+            { name: "madeonsol_deployer_stats", description: "Chain-wide deployer stats — tracked count, bonds detected, bond rate, tier counts." },
+            { name: "madeonsol_deployer_leaderboard", description: "Deployer reputation leaderboard; compare lifetime vs recent bond rate." },
+            { name: "madeonsol_deployer_profile", description: "One deployer's tier, bond rates, totals, runner_rate. Untracked returns zeros, not 404." },
+            { name: "madeonsol_deployer_tokens", description: "Every token one deployer launched, with time-to-bond and peak MC." },
+            { name: "madeonsol_deployer_alert_stats", description: "Alert volume + per-tier bond-rate and MC-multiplier distributions." },
+            { name: "madeonsol_deployer_best_tokens", description: "Best recent tokens from ranked deployers, by peak MC multiple." },
+            { name: "madeonsol_deployer_recent_bonds", description: "Fresh graduations from tracked deployers; poll with next_since." },
             { name: "madeonsol_kol_hot_tokens", description: "KOL momentum tokens — accelerating buy interest." },
             { name: "madeonsol_kol_pnl", description: "Deep per-wallet PnL: equity curve, risk metrics, positions." },
             { name: "madeonsol_kol_trending_tokens", description: "Tokens ranked by KOL buy volume (5m–12h windows)." },
