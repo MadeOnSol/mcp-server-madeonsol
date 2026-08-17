@@ -799,7 +799,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_stream_token",
-      "Generate a 24h WebSocket streaming token. Includes ws_url for KOL/deployer streaming (Pro/Ultra) and dex_ws_url for all-DEX trade streaming (Ultra only).",
+      "Generate a 24h WebSocket streaming token. Includes ws_url for KOL/deployer streaming (Pro/Ultra) and dex_ws_url for all-DEX trade streaming (Ultra only). PRO+ channels now also include token:locks (event token:lock — every NEW Streamflow / Jupiter Lock / Bonfida lock or vesting contract) and token:fee_claims (event token:fee_claim — every pump.fun fee event: distributions to shareholders, social/X claims, config changes, creator transfers).",
       {},
       { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       async () => ({
@@ -1004,6 +1004,108 @@ function registerTools(server: McpServer) {
       async ({ mint }) => ({
         content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/holders`) }],
       })
+    );
+
+    server.tool(
+      "madeonsol_token_locks",
+      "Token locks & vesting on ONE Solana mint — every on-chain lock / vesting contract from Streamflow, Jupiter Lock and Bonfida token-vesting, decoded from the locker programs' account state, plus a summary. Answers 'did the team lock, how much, until when, and can they pull it'. Each contract row: lock_account, program (streamflow | jupiter_lock | bonfida_vesting), kind (lock = whole amount at one date | vesting = cliff and/or periodic release), status (active | completed | cancelled | closed — derived at request time), sender (the locker; null for Bonfida), recipient, name, the schedule (start_at / cliff_at / end_at, period_seconds, continuous = per-second stream, amount_per_period_*, cliff_amount_*, perpetual), the terms (cancelable_by_sender — the locker can cancel, so funds are locked against the RECIPIENT not the locker; cancelable_by_recipient, transferable, can_topup) and a LIVE-derived view: locked_* (still locked right now), unlocked_*, withdrawn_* (claimed), claimable_* (unlocked but not withdrawn), next_unlock {at, kind cliff|period|final|tranche, amount}. summary: lock_count (exact), complete (false when the mint has >5000 contracts — totals then cover the newest 5000, rows_considered), active_count, by_program, by_kind, distinct_lockers, locked / deposited totals, unlocking_7d_* and unlocking_30d_* forward schedule, the nearest next_unlock across all contracts, active_cancelable_by_sender. Every *_raw amount is a base-unit digit STRING — never coerce to a float; ui (locked, amount…), *_usd and *_pct_of_supply are null when decimals / price are unknown (see token.facts_resolved). status/program filter the list only — the summary always covers all rows. LP LOCKS ARE NOT INCLUDED (this is token/vesting locks; LP locks are a separate feature). Poll for updates — claims/cancels are not pushed on the WebSocket. PRO+ — BASIC receives HTTP 403.",
+      {
+        mint: z.string().describe("Token mint address (base58)"),
+        status: z.enum(["active", "completed", "cancelled", "closed"]).optional().describe("Filter the list by derived status (summary always covers all rows)"),
+        program: z.enum(["streamflow", "jupiter_lock", "bonfida_vesting"]).optional().describe("Filter by locker program"),
+        limit: z.number().min(1).max(500).default(200).describe("Max contracts to return (1-500, default 200)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint, status, program, limit }) => {
+        const qs = new URLSearchParams();
+        if (status) qs.set("status", status);
+        if (program) qs.set("program", program);
+        if (limit != null) qs.set("limit", String(limit));
+        const query = qs.toString() ? `?${qs.toString()}` : "";
+        return { content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/locks${query}`) }] };
+      }
+    );
+
+    server.tool(
+      "madeonsol_token_locks_feed",
+      "Cross-token feed of NEW token lock / vesting contracts — who just locked tokens, of what mint, how much, until when — newest first, across ALL mints, from Streamflow, Jupiter Lock and Bonfida vesting. Each row has the same shape as a madeonsol_token_locks contract (lock_account, program, kind, status, sender, recipient, amount_* / locked_* / claimable_*, schedule, terms, next_unlock, created_at, tx_signature) plus token {symbol, name, decimals, price_usd, market_cap_usd}. Poll with since= (cursor = pagination.next_since) for new contracts, before= (pagination.next_before) to page back, or subscribe to the WebSocket channel 'token:locks' (event type 'token:lock', PRO+ stream token) for a push the moment the contract lands on-chain. Filters: mint, sender, recipient, program (streamflow | jupiter_lock | bonfida_vesting), kind (lock | vesting), status, min_usd (deposited amount ≥, needs a known price), min_pct_of_supply — the last three post-filter with a ×4 over-fetch, so a page may come back short. Backfilled Jupiter Lock rows have no on-chain creation time (created_at_estimated=true) and are EXCLUDED by default — include_estimated='1' to include them. Base-unit amounts are digit STRINGS; ui/usd/pct null when unknown. LP locks NOT included. PRO+ — BASIC receives HTTP 403.",
+      {
+        since: z.string().optional().describe("ISO 8601 — only contracts created after this instant (use pagination.next_since to poll)"),
+        before: z.string().optional().describe("ISO 8601 — page back: only contracts created before this instant (pagination.next_before)"),
+        mint: z.string().optional().describe("Filter by token mint"),
+        sender: z.string().optional().describe("Filter by locker / creator wallet"),
+        recipient: z.string().optional().describe("Filter by recipient wallet"),
+        program: z.enum(["streamflow", "jupiter_lock", "bonfida_vesting"]).optional().describe("Filter by locker program"),
+        kind: z.enum(["lock", "vesting"]).optional().describe("lock = whole amount at one date; vesting = cliff and/or periodic release"),
+        status: z.enum(["active", "completed", "cancelled", "closed"]).optional().describe("Filter by derived status"),
+        min_usd: z.number().min(0).optional().describe("Deposited amount ≥ this USD value (needs a known price; post-filter)"),
+        min_pct_of_supply: z.number().min(0).max(100).optional().describe("Deposited amount ≥ this % of supply (post-filter)"),
+        include_estimated: z.enum(["1", "0", "true", "false"]).optional().describe("'1' to include backfilled Jupiter Lock rows with an estimated created_at (excluded by default)"),
+        limit: z.number().min(1).max(100).default(50).describe("Rows per page (1-100, default 50)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async (params) => {
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) qs.set(k, String(v));
+        const query = qs.toString() ? `?${qs.toString()}` : "";
+        return { content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/locks${query}`) }] };
+      }
+    );
+
+    server.tool(
+      "madeonsol_token_unlocks",
+      "Upcoming token UNLOCK EVENTS across all active lock / vesting contracts inside a window — cliffs, periodic releases (hourly or coarser) and final unlocks — i.e. which tokens have locked supply hitting the market this week, how much, from whose lock. One entry per active contract = its NEXT unlock event in the window: unlock_at, in_seconds, event (cliff | period | final | tranche), amount_raw / amount / amount_usd / amount_pct_of_supply for that event, plus window_amount_* = that contract's TOTAL release over the whole window, mint, token {symbol, name, decimals, price_usd, market_cap_usd} and lock (a subset of the madeonsol_token_locks row: lock_account, program, kind, sender, recipient, cancelable_by_sender…). Continuous per-second streams (Streamflow payroll) contribute only their cliff / final events. within = 1h | 6h | 24h | 3d | 7d | 14d | 30d | 90d (default 7d); sort = soonest (default) | largest_usd | largest_pct; filter by mint / program / kind / min_usd (next-event amount ≥, needs a known price) / min_pct_of_supply. Response: window {within, from, to}, unlocks[], pagination {limit, count, total_in_window, has_more}. Base-unit amounts are digit STRINGS; ui/usd/pct null when decimals or price are unknown; prices implying a market cap > $100B are treated as phantom → usd null. Token/vesting locks only — LP locks not included. PRO+ — BASIC receives HTTP 403.",
+      {
+        within: z.enum(["1h", "6h", "24h", "3d", "7d", "14d", "30d", "90d"]).default("7d").describe("Look-ahead window (default 7d)"),
+        mint: z.string().optional().describe("Filter by token mint"),
+        program: z.enum(["streamflow", "jupiter_lock", "bonfida_vesting"]).optional().describe("Filter by locker program"),
+        kind: z.enum(["lock", "vesting"]).optional().describe("lock | vesting"),
+        min_usd: z.number().min(0).optional().describe("Next-event amount ≥ this USD value (needs a known price)"),
+        min_pct_of_supply: z.number().min(0).max(100).optional().describe("Next-event amount ≥ this % of supply"),
+        sort: z.enum(["soonest", "largest_usd", "largest_pct"]).default("soonest").describe("Ordering (default soonest)"),
+        limit: z.number().min(1).max(200).default(50).describe("Rows per page (1-200, default 50)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async (params) => {
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) qs.set(k, String(v));
+        const query = qs.toString() ? `?${qs.toString()}` : "";
+        return { content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/unlocks${query}`) }] };
+      }
+    );
+
+    server.tool(
+      "madeonsol_token_fee_shares",
+      "pump.fun creator-fee SHARING on one coin — who receives what share of its creator fees. Decodes the on-chain SharingConfig of the pump_fees program (PDA ['sharing-config', mint]): config {sharing_config, admin, admin_revoked, status, version, is_default (true = 100% to the admin/creator — a REAL answer, not 'no data'), redirected_bps / redirected_pct (share going to non-admin addresses), social_bps / social_pct, shareholders[] {address, share_bps, share_pct, is_admin (the config admin, normally the coin creator), is_social_pda (the address is a pump_fees SocialFeePda — fees earmarked for a platform identity such as an X account), social {platform (2 = X), platform_label, user_id (the platform-native NUMERIC id, not the handle), lifetime_claimed_raw / lifetime_claimed / lifetime_claimed_usd, last_claimed_at}, received_raw / received / received_usd, payout_count, last_payout_at}, source ('stream' = our table, which only stores NON-default configs; 'chain' = live PDA read), updated_at}. config is null with config_error set only when the live read failed on every RPC endpoint. Plus quote {symbol, decimals, sol_usd}, distributions {count, total_raw / total / total_usd, last_at, recipients[] (per-recipient received totals), past_recipients[] (no longer in the split), payouts_considered, payouts_truncated}, history[] (config created / updated / reset, creator transferred — newest first) and recent_distributions[] {at, tx_signature, amount_*, shareholders[], actor}. Amounts are in quote base units (SOL lamports unless a stable-quoted coin) as digit STRINGS; ui/usd null when unknown. EVENT HISTORY (distributions, history) STARTS 2026-08-17 — the config itself is current on-chain state. Use madeonsol_token_fee_claims for the cross-token event feed. PRO+ — BASIC receives HTTP 403.",
+      { mint: z.string().describe("pump.fun coin mint address (base58)") },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ mint }) => ({
+        content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/fee-shares`) }],
+      })
+    );
+
+    server.tool(
+      "madeonsol_token_fee_claims",
+      "pump.fun FEE-EVENT feed, newest first, across all coins: every decoded pump_fees / pump event — type = distribution (creator fees paid out pro-rata to the SharingConfig shareholders, i.e. fees redirected to others, with payouts[] {address, share_bps, amount_raw, amount, amount_usd} per address) | social_claim (fees earmarked for a platform identity — social.platform 2 = X, social.user_id = the platform-native numeric id — claimed to a recipient wallet; mint is NULL) | shares_created / shares_updated / shares_reset (SharingConfig changes, with shareholders[] {address, share_bps}) | creator_transferred (creator role moved; recipient = new creator) | creator_claim (the plain creator vault claim — per CREATOR, carries NO mint; EXCLUDED unless requested via type=). Each event: id, type, at, tx_signature, slot, mint (null for social claims / creator claims), admin, actor (transaction signer), recipient, amount_raw (quote base units — SOL lamports unless a stable-quoted coin — as a digit STRING), amount, amount_usd, quote, social {platform, platform_label, user_id, pda}, shareholders, payouts, payload (full decoded Anchor event). Default 100%-to-creator configs and zero-amount distributions are NOT stored. Poll with since= (cursor = pagination.next_since), page back with before= (pagination.next_before), or subscribe to the WebSocket channel 'token:fee_claims' (event type 'token:fee_claim', PRO+ stream token) for a push the moment the tx confirms. Filters: type (comma list), mint, recipient (payout / claim recipient wallet, or new creator), actor, social_platform (raw platform id, 2 = X), social_user_id, min_sol (amount floor in SOL). HISTORY STARTS 2026-08-17. Use madeonsol_token_fee_shares for one coin's current split. PRO+ — BASIC receives HTTP 403.",
+      {
+        type: z.string().optional().describe("Comma list of event types: distribution, social_claim, shares_created, shares_updated, shares_reset, creator_transferred, creator_claim (default: all except creator_claim)"),
+        mint: z.string().optional().describe("Filter by coin mint"),
+        recipient: z.string().optional().describe("Payout / claim recipient wallet, or the new creator for creator_transferred"),
+        actor: z.string().optional().describe("Transaction signer"),
+        social_platform: z.number().int().optional().describe("Raw social platform id (2 = X)"),
+        social_user_id: z.string().optional().describe("Platform-native numeric user id (not the handle)"),
+        min_sol: z.number().min(0).optional().describe("Amount floor in SOL"),
+        since: z.string().optional().describe("ISO 8601 — only events after this instant (use pagination.next_since to poll)"),
+        before: z.string().optional().describe("ISO 8601 — page back: only events before this instant (pagination.next_before)"),
+        limit: z.number().min(1).max(100).default(50).describe("Rows per page (1-100, default 50)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async (params) => {
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) qs.set(k, String(v));
+        const query = qs.toString() ? `?${qs.toString()}` : "";
+        return { content: [{ type: "text" as const, text: await restQuery("GET", `/tokens/fee-claims${query}`) }] };
+      }
     );
 
     server.tool(
@@ -1715,6 +1817,11 @@ async function main() {
             { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
             { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
             { name: "madeonsol_token_holders", description: "Live holder census + concentration — who holds NOW. Exact holder_count (null only if the provider refuses a mega-cap), labelled owners, pools/curves/burns excluded and named. PRO=10, ULTRA=50, BUSINESS=100 disclosed; 503 holder_scan_in_progress → retry in 20 s." },
+            { name: "madeonsol_token_locks", description: "Token locks & vesting on a mint (Streamflow / Jupiter Lock / Bonfida) — every contract with live locked/claimable, schedule, cancelable-by-sender, plus 7d/30d unlock summary. LP locks not included. PRO+." },
+            { name: "madeonsol_token_locks_feed", description: "Cross-token feed of NEW lock/vesting contracts, newest first; poll with next_since or subscribe to WS channel token:locks. PRO+." },
+            { name: "madeonsol_token_unlocks", description: "Upcoming unlock EVENTS (cliff / period / final / tranche) across all active contracts inside 1h–90d — what locked supply hits the market, how much, from whose lock. PRO+." },
+            { name: "madeonsol_token_fee_shares", description: "pump.fun creator-fee SharingConfig on a coin — shareholders (bps, is_admin, is_social_pda / X identity), redirected_bps, distributions rollup + config history (from 2026-08-17). PRO+." },
+            { name: "madeonsol_token_fee_claims", description: "pump.fun fee-event feed — distributions to shareholders, social (X) claims, config changes, creator transfers; poll with next_since or WS channel token:fee_claims. History from 2026-08-17. PRO+." },
             { name: "madeonsol_token_buyer_quality", description: "0–100 buyer quality score for a token's first-buyer cohort." },
             { name: "madeonsol_token_depth", description: "Per-pool price impact / slippage — quotes per SOL buy size + SOL to move price 1%/5%/10%; unsupported pools flagged with a reason. PRO+." },
             { name: "madeonsol_token_candles", description: "Historical OHLCV price candles (1m–1d). PRO=OHLCV 30d; ULTRA=+net flow, liquidity delta, full history." },
