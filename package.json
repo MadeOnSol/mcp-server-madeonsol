@@ -1,6 +1,6 @@
 {
   "name": "mcp-server-madeonsol",
-  "version": "1.22.0",
+  "version": "1.23.0",
   "mcpName": "io.github.MadeOnSol/madeonsol",
   "description": "MCP server for MadeOnSol Solana KOL intelligence API — use from Claude, Cursor, or any MCP client. Free tier 200 req/day, no payment to start.",
   "type": "module",
