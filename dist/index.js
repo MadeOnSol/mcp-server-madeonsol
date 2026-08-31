@@ -69,7 +69,7 @@ async function initAuth() {
         }
     }
     console.error("\n[madeonsol-mcp] No auth configured — every tool call will fail.\n" +
-        "  → Get a free MADEONSOL_API_KEY (200 req/day, no card) at https://madeonsol.com/pricing\n" +
+        "  → Get a free MADEONSOL_API_KEY (200 req/day, no card; live feeds 5-min delayed — paid keys are real-time) at https://madeonsol.com/pricing\n" +
         "  → Or set SVM_PRIVATE_KEY for x402 micropayments.\n");
 }
 async function query(path, params) {
