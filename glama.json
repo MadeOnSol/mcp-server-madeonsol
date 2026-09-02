@@ -4,8 +4,8 @@
     "madeonsol"
   ],
   "display_name": "MadeOnSol — Solana memecoin intelligence",
-  "description": "Real-time Solana memecoin trading intelligence — track 1,000+ KOL wallets with <3s latency, score 15,500+ Pump.fun deployers, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 14 programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day, no payment to start; auth via msk_ API key or x402 micropayments. New customers get a 5-day free trial of Pro or Ultra by card — nothing charged during the trial, cancel anytime.",
-  "version": "1.24.0",
+  "description": "Real-time Solana memecoin trading intelligence — track 1,000+ KOL wallets with <3s latency on paid keys and x402 (free-tier live feeds are 5-min delayed), score 15,500+ Pump.fun deployers, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 14 programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day (live feeds 5-min delayed), no payment to start; auth via msk_ API key or x402 micropayments.",
+  "version": "1.26.0",
   "homepage": "https://madeonsol.com/solana-api",
   "repository": "https://github.com/madeonsol/mcp-server-madeonsol",
   "license": "MIT",
@@ -141,6 +141,10 @@
       "description": "Mint-scoped trade tape — cursor-paginated raw trades for one token, full history from 2026-04-12, pump.fun-pipeline scoped. PRO+."
     },
     {
+      "name": "madeonsol_tokens_surges",
+      "description": "Token surges & revivals — momentum fires with tape, KOL, early-buyer, deployer context and risk_flags[]; surge tiers early/strong/breakout vs launch MC, revivals confirmed by tape buys; +1 h outcomes and per-tier hit-rates. PRO+."
+    },
+    {
       "name": "madeonsol_wallet_tracker_watchlist",
       "description": "List tracked wallets and remaining capacity (Free 10 / Pro 50 / Ultra 100)."
     },
@@ -246,7 +250,7 @@
     },
     {
       "name": "madeonsol_stream_token",
-      "description": "Issue a 24h WebSocket streaming token (Pro/Ultra). Includes dex_ws_url on ULTRA."
+      "description": "Issue your WebSocket streaming token (Pro/Ultra) — never expires; same token on every call, rotate=true to replace it. Includes dex_ws_url on ULTRA."
     },
     {
       "name": "madeonsol_stream_sessions_list",

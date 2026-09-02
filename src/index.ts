@@ -1173,6 +1173,36 @@ function registerTools(server: McpServer) {
     );
 
     server.tool(
+      "madeonsol_deployer_as_of",
+      "A pump.fun deployer's reputation exactly as it stood on a given date — the latest write-on-change snapshot at or before it, so an agent backtests without look-ahead bias. snapshot.snapshot_date can predate the requested date (snapshots are write-on-change); snapshot.carried=true marks that. No snapshot at or before the date returns as_of:false, snapshot:null — nothing is ever synthesized. date must be >= 2026-04-07 and not in the future. PRO/ULTRA only — BASIC receives HTTP 403.",
+      {
+        wallet: z.string().describe("Deployer wallet address (base58)"),
+        date: z.string().optional().describe("YYYY-MM-DD (UTC). Default: today. Must be >= 2026-04-07 and not in the future."),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ wallet, date }) => {
+        const qs = new URLSearchParams();
+        if (date !== undefined) qs.set("date", date);
+        const query = qs.toString();
+        const path = `/deployer-hunter/${encodeURIComponent(wallet)}/as-of${query ? `?${query}` : ""}`;
+        return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
+    );
+
+    server.tool(
+      "madeonsol_deployer_rewards",
+      "pump.fun creator-fee rewards for a wallet, answered two ways that are never merged: collected (what actually reached the wallet — direct vault claims kept 90 days, social-handle claims, shareholder payouts on any token) and attributed (every payout on the tokens it deployed, split to_self/to_others + redirected_pct). Every money field is {sol, usdc, usd}; usd is null (never a silent 0) when a SOL amount exists and no SOL price was available. top_tokens/top_recipients (up to 10, USD-sorted) show where attributed fees went. Works for non-deployers too (is_deployer:false, attributed empty). PRO/ULTRA only — BASIC receives HTTP 403.",
+      {
+        wallet: z.string().describe("Wallet address (base58)"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ wallet }) => {
+        const path = `/deployer-hunter/${encodeURIComponent(wallet)}/rewards`;
+        return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
+    );
+
+    server.tool(
       "madeonsol_token_candles",
       "Historical OHLCV price candles for a token, aggregated from the on-chain trade firehose. Each candle carries t/open/high/low/close/volume_usd/trades/market_cap_usd. Timeframes: 1m/5m/15m/1h/4h/1d. PRO=OHLCV, last 30 days only. ULTRA adds buy/sell volume + count splits, net flow, MEV volume, open/close liquidity, high/low MC, and full history. PRO/ULTRA only — BASIC receives HTTP 403.",
       {
