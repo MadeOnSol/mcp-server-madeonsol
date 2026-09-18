@@ -11,8 +11,14 @@
 
 MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. Use from Claude Desktop, Cursor, or any MCP-compatible client.
 
-> Real-time Solana trading intelligence: track 1,069 KOL wallets with <3s latency on paid keys and x402 pay-per-call (free-tier live feeds are 5-min delayed), score 23,000+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), verify any wallet's CURRENT on-chain holdings straight from its token accounts, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day across 40+ endpoints (live feeds 5-min delayed) — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
+<!-- Stats below are deliberate conservative floors kept in sync with the site's canonical labels (src/lib/constants.ts KOL_COUNT_LABEL / DEPLOYERS_PROFILED_LABEL / ALPHA_WALLETS_LABEL), rounded down from a live count measured on a known date and bumped only when the real count crosses the next threshold -- never the exact live number, which changes every minute. Do not replace with a live/volatile count. -->
 
+> Real-time Solana trading intelligence: track 2,000+ KOL wallets with <3s latency on paid keys and x402 pay-per-call (free-tier live feeds are 5-min delayed), score 85K+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), verify any wallet's CURRENT on-chain holdings straight from its token accounts, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day across 40+ endpoints (live feeds 5-min delayed) — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
+
+> **New in 2.0.0 — BREAKING: HTTP mode now requires a separate token (security fix, SEC-02).** If you run this server with `MCP_TRANSPORT=http`, you must now also set `MCP_HTTP_TOKEN` (a random secret you generate) and send it as `Authorization: Bearer <token>` on **every** request, including `GET /health` and the server-card endpoint — previously, anything that could reach the bound port could call every tool using the operator's own API key with no authentication at all. HTTP mode is now hard-restricted to literal loopback (`127.0.0.1` / `::1`), rejects `Origin`/`X-Forwarded-*` headers and duplicate `Authorization`/`Host` headers outright, exposes only `POST /mcp` plus the two GET routes, and **refuses to start** if a wallet/payment signer is configured — HTTP mode can never carry a payer key. **If you use the default `stdio` transport (Claude Desktop, Cursor, most MCP clients), nothing changes — no action needed.** This is a single shared-operator-token fix, not a new multi-user or OAuth system; each HTTP caller still shares the operator's own MadeOnSol API key. Full writeup: `docs/audit/SEC02_PRIVATE_HTTP_MCP.md`.
+>
+> **New in 1.27.1 — the server now reports MCP `instructions`.** The `initialize` response's `instructions` field (operational guidance for the calling agent — distinct from this README/package description) was never set; directories that introspect the live server (Glama) reported "no recorded MCP instructions." No new tools; still 104 total.
+>
 > **New in 1.27.0 — top traders, sniper watchlist management, and two update tools (104 tools total).** Six additions found by an internal agentic-infra coverage audit. `madeonsol_token_top_traders` (`GET /tokens/{mint}/top-traders`, PRO/ULTRA) ranks a token's wallets by realized PnL or ROI, enriched with KOL/alpha-wallet identity — this endpoint already existed on the REST API and x402 rail but had no MCP tool. `madeonsol_sniper_watchlist_list` / `_add` / `_remove` (PRO+/ULTRA) manage your custom sniper-deploy watchlist (`madeonsol_sniper_recent(watchlist: true)` narrows to it) — previously only reachable via raw HTTP. `madeonsol_update_webhook` (PATCH) changes a webhook's URL, events, or active state without deleting and recreating it. `madeonsol_wallet_tracker_relabel` (PATCH) renames or clears a tracked wallet's label.
 >
 > **New in 1.26.0 — deployer reputation as-of a date, and creator-fee rewards.** Two new tools (PRO+, keyed `msk_` API only — no x402 route). `madeonsol_deployer_as_of` binds `GET /deployer-hunter/{wallet}/as-of`: the deployer's reputation exactly as it stood on `date` (default today, UTC) — the latest write-on-change snapshot at or before it, so an agent backtests without look-ahead bias. `snapshot.snapshot_date` can predate `date` (write-on-change); `snapshot.carried: true` marks that. No snapshot at or before `date` → `as_of: false, snapshot: null` — nothing is ever synthesized. `date` must be ≥ 2026-04-07 and not in the future. `madeonsol_deployer_rewards` binds `GET /deployer-hunter/{wallet}/rewards`: pump.fun creator-fee rewards, answered two ways that are never merged — `collected` (what actually reached the wallet: direct vault claims kept 90 days, social-handle claims, shareholder payouts on **any** token) and `attributed` (every payout on the tokens it **deployed**, split `to_self`/`to_others` + `redirected_pct`). Every money field is `{sol, usdc, usd}`; `usd` is `null` (never a silent 0) when a SOL amount exists and no SOL price was available. `top_tokens`/`top_recipients` (≤10, USD-sorted) show where attributed fees went. Works for non-deployers too (`is_deployer: false`, `attributed` empty).
@@ -165,6 +171,24 @@ Add to `claude_desktop_config.json`:
 
 Add to MCP settings with the same command and env vars.
 
+
+## Private HTTP transport (SEC-02)
+
+Stdio remains the default for Claude Desktop, Cursor and other local MCP clients. HTTP now requires an explicit private-operator configuration; previously unauthenticated HTTP launch settings will fail closed.
+
+1. Set `MADEONSOL_API_KEY` to the operator's `msk_` key.
+2. Generate a separate random access token, for example `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`, and store it as `MCP_HTTP_TOKEN`. Do not reuse the upstream API key or put either credential in a URL.
+3. Set `MCP_TRANSPORT=http`, `HOST=127.0.0.1` (default, or `::1`) and optionally `PORT` (default `3100`). Non-loopback bindings, missing credentials and any `SVM_PRIVATE_KEY` or `RHC_PAYER_KEY` are refused before startup. Solana wallet/x402 mode remains available through stdio.
+4. Connect to `http://127.0.0.1:3100/mcp` with `Authorization: Bearer <MCP_HTTP_TOKEN>` on **every request**, plus the normal MCP `Content-Type` and `Accept` headers. Use stdio if the client cannot attach headers. The local token is checked by the MCP adapter; only `MADEONSOL_API_KEY` is sent upstream.
+
+Only `POST /mcp`, `GET /health` and `GET /.well-known/mcp/server-card.json` are exposed, all authenticated. `/` and arbitrary paths are no longer MCP endpoints. The adapter is stateless: it does not issue session IDs, rejects supplied `Mcp-Session-Id`, and returns 405 for GET/DELETE on `/mcp`. Host must be the selected loopback literal with its port, or `localhost` with that exact port. Browser Origin headers, forwarded/proxy headers and cross-origin requests are rejected; no CORS access is granted.
+
+Limits: 256 KiB uncompressed JSON bodies, 8 KiB headers, a 10-second body-upload deadline, and 16 active authenticated requests. Oversized or malformed inputs are rejected before tool dispatch. This is not an overall tool-execution deadline; an upstream action already submitted may continue after a disconnect.
+
+Everyone holding the local token acts as the **same operator**, including access to that operator's mutation tools. This is not a multi-user/OAuth server: do not put it behind a public proxy, share it with untrusted users or expose a funded signer. Separate users require isolated processes/credentials or a future transport that authenticates each principal and maps their own credentials. Restart with a new `MCP_HTTP_TOKEN` to rotate access.
+
+The Docker image uses the same loopback restriction and requires both environment credentials. Its healthcheck authenticates without putting the token in the URL. It does not support a publicly published Docker port; use stdio or a client in the same trusted network namespace.
+
 ## Tools
 
 ### KOL Intelligence
@@ -223,7 +247,7 @@ Cached server-side with dynamic TTL (5min / 1h / 24h based on last activity). Co
 
 ### Alpha Wallet Intelligence
 
-Scored from 1M+ early-buyer records (wallets seen in the first 20 buyers of Pump.fun tokens).
+Scored from 1.5M+ early-buyer records (wallets seen in the first 20 buyers of Pump.fun tokens).
 
 | Tool | Tier | Description |
 |---|---|---|

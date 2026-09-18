@@ -5,13 +5,19 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { VERSION } from "./version.js";
-import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createPrivateHttpServer, readHttpConfig } from "./http-security.js";
+
+// MCP `initialize` response `instructions` field (ServerOptions.instructions in
+// the SDK) — operational guidance for the calling agent, distinct from the
+// package/marketing description in package.json and glama.json. Left unset
+// until 2026-09-18, which is why directories that introspect the live server
+// (e.g. Glama) reported "no recorded MCP instructions."
+const SERVER_INSTRUCTIONS =
+  "Real-time Solana on-chain intelligence: KOL wallet trades, Pump.fun deployer reputation, token risk/holders/buyer-quality, wallet PnL, and the all-DEX trade tape. Call madeonsol_discovery first to see every endpoint and its x402 price. Auth is either a msk_ API key (MADEONSOL_API_KEY env var, madeonsol.com/pricing) or pay-per-call x402 micropayments (SVM_PRIVATE_KEY env var) — no signup required for x402. Prefer a single-item lookup (madeonsol_token_get, madeonsol_wallet_stats) before a heavier call (madeonsol_wallet_pnl, madeonsol_token_risk, madeonsol_token_trades) on the same mint/wallet. Free-tier live feeds (KOL/deployer alerts) are delayed 5 minutes; paid keys and x402 calls are real-time.";
 
 const BASE_URL = process.env.MADEONSOL_API_URL || "https://madeonsol.com";
 const MADEONSOL_API_KEY = process.env.MADEONSOL_API_KEY; // Native key from madeonsol.com/pricing
 const PRIVATE_KEY = process.env.SVM_PRIVATE_KEY; // x402 micropayments (for AI agents)
-const PORT = parseInt(process.env.PORT || "3100", 10);
 const MODE = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "http"
 
 // Auth mode: MADEONSOL_API_KEY > SVM_PRIVATE_KEY (x402)
@@ -1911,14 +1917,12 @@ function registerTools(server: McpServer) {
 }
 
 async function main() {
+  const httpConfig = MODE === "http" ? readHttpConfig() : undefined;
   await initAuth();
 
   if (MODE === "http") {
-    // HTTP transport for hosted environments (Smithery, etc.)
-    const httpServer = createServer();
-    const transports = new Map<string, StreamableHTTPServerTransport>();
-
-    httpServer.on("request", async (req, res) => {
+    // Configuration is validated before authentication can initialize a signer.
+    const httpServer = createPrivateHttpServer(httpConfig!, async (req, res, body) => {
       // Health check
       if (req.method === "GET" && req.url === "/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
@@ -1931,7 +1935,7 @@ async function main() {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           name: "madeonsol",
-          description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 15,500+ Pump.fun deployers, 25,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Supports MadeOnSol API key (msk_) or x402 micropayments.",
+          description: "Solana KOL trading intelligence and deployer analytics. Real-time data from 1,000+ KOL wallets, 15,500+ Pump.fun deployers, 25,000+ scored alpha wallets, copy-trade rules, and wallet tracker. Private HTTP access with the operator's MadeOnSol API key (msk_).",
           version: VERSION,
           tools: [
             { name: "madeonsol_kol_feed", description: "Get real-time Solana KOL trades from 1,000+ tracked wallets." },
@@ -2030,59 +2034,32 @@ async function main() {
         return;
       }
 
-      // MCP endpoint
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      {
-        if (req.method === "POST") {
-          let transport = sessionId ? transports.get(sessionId) : undefined;
-
-          if (!transport) {
-            transport = new StreamableHTTPServerTransport({
-              sessionIdGenerator: undefined,
-            });
-            const server = new McpServer({ name: "madeonsol", version: VERSION });
-            registerTools(server);
-            await server.connect(transport);
-          }
-
-          await transport.handleRequest(req, res);
-          return;
-        }
-
-        if (req.method === "GET" && sessionId) {
-          const transport = transports.get(sessionId);
-          if (transport) {
-            await transport.handleRequest(req, res);
-            return;
-          }
-        }
-
-        if (req.method === "DELETE" && sessionId) {
-          const transport = transports.get(sessionId);
-          if (transport) {
-            await transport.handleRequest(req, res);
-            transports.delete(sessionId);
-            return;
-          }
-        }
-      }
-
-      res.writeHead(404);
-      res.end("Not found");
+      // One server/transport per authenticated stateless POST /mcp.
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+        enableJsonResponse: true,
+        enableDnsRebindingProtection: true,
+        allowedHosts: httpConfig!.allowedHosts,
+        allowedOrigins: [],
+      });
+      const server = new McpServer({ name: "madeonsol", version: VERSION }, { instructions: SERVER_INSTRUCTIONS });
+      res.once("close", () => { void server.close().catch(() => {}); });
+      registerTools(server);
+      await server.connect(transport);
+      if (res.destroyed) { await server.close(); return; }
+      await transport.handleRequest(req, res, body);
     });
 
-    // Bind to 127.0.0.1 only — defense in depth. UFW already blocks the port
-    // externally, but binding to all interfaces would expose the server to any
-    // misconfigured firewall rule. Override with HOST=0.0.0.0 if you ever need
-    // to expose it directly (e.g. for hosted environments behind a separate
-    // reverse proxy).
-    const HOST = process.env.HOST || "127.0.0.1";
-    httpServer.listen(PORT, HOST, () => {
-      console.error(`[madeonsol-mcp] HTTP server listening on ${HOST}:${PORT}`);
+    httpServer.on("error", () => {
+      console.error("[madeonsol-mcp] HTTP listener failed");
+      process.exitCode = 1;
+    });
+    httpServer.listen(httpConfig!.port, httpConfig!.host, () => {
+      console.error(`[madeonsol-mcp] HTTP server listening on ${httpConfig!.host}:${httpConfig!.port}/mcp (private operator only)`);
     });
   } else {
     // Stdio transport for local use (Claude Desktop, Cursor, Claude Code)
-    const server = new McpServer({ name: "madeonsol", version: VERSION });
+    const server = new McpServer({ name: "madeonsol", version: VERSION }, { instructions: SERVER_INSTRUCTIONS });
     registerTools(server);
     const transport = new StdioServerTransport();
     await server.connect(transport);
@@ -2092,5 +2069,8 @@ async function main() {
 // Only auto-run when executed as a program (CLI / spawned process), not when
 // the module is imported by a test for its exported pure helpers.
 if (process.env.MADEONSOL_MCP_NO_AUTORUN !== "1") {
-  main().catch(console.error);
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : "MCP startup failed");
+    process.exitCode = 1;
+  });
 }
