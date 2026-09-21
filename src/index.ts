@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { SolanaPaymentBudget, createSolanaPaidFetch, solanaPaymentPolicyFromConfig } from "./solana-payment.js";
 import { VERSION } from "./version.js";
 import { createPrivateHttpServer, readHttpConfig } from "./http-security.js";
 
@@ -67,22 +68,15 @@ async function initAuth() {
     return;
   }
   if (mode === "x402" && PRIVATE_KEY) {
+    const budget = new SolanaPaymentBudget(solanaPaymentPolicyFromConfig(key => process.env[key]));
     try {
-      const { wrapFetchWithPayment } = await import("@x402/fetch");
-      const { x402Client } = await import("@x402/core/client");
-      const { ExactSvmScheme } = await import("@x402/svm/exact/client");
-      const { createKeyPairSignerFromBytes } = await import("@solana/kit");
-      const { base58 } = await import("@scure/base");
-
-      const signer = await createKeyPairSignerFromBytes(base58.decode(PRIVATE_KEY));
-      const client = new x402Client();
-      client.register("solana:*", new ExactSvmScheme(signer));
-      paidFetch = wrapFetchWithPayment(fetch, client);
+      paidFetch = await createSolanaPaidFetch(PRIVATE_KEY, budget, BASE_URL);
       authMode = "x402";
-      console.error(`[madeonsol-mcp] x402 payments enabled, wallet: ${signer.address}`);
+      console.error("[madeonsol-mcp] x402 payments enabled with an explicit authorization budget");
       return;
     } catch (err) {
-      console.error("[madeonsol-mcp] x402 setup failed:", err);
+      // Never silently fall back to unauthenticated mode after a policy/setup failure.
+      throw new Error("[madeonsol-mcp] x402 setup failed", { cause: err });
     }
   }
   console.error(

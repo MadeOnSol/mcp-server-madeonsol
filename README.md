@@ -15,6 +15,8 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 
 > Real-time Solana trading intelligence: track 2,000+ KOL wallets with <3s latency on paid keys and x402 pay-per-call (free-tier live feeds are 5-min delayed), score 85K+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), verify any wallet's CURRENT on-chain holdings straight from its token accounts, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day across 40+ endpoints (live feeds 5-min delayed) — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
 
+> **New in 3.0.0 — BREAKING for x402 (keyless) mode only: five env vars are now required and startup FAILS instead of silently degrading (security fix, SDK-01).** Set `X402_PAY_TO`, `X402_FEE_PAYER`, `X402_MAX_AMOUNT_ATOMIC`, `X402_MAX_TOTAL_AMOUNT_ATOMIC` and `SVM_RPC_URL` alongside `SVM_PRIVATE_KEY`. Before, keyless mode signed whatever Solana USDC amount, recipient and fee payer a 402 challenge asked for. Now every challenge is checked BEFORE signing against a trusted merchant `payTo`, a trusted facilitator `feePayer` (which must differ from your wallet), the USDC mint, `solana:5eykt…` mainnet, the `exact` scheme, a per-call cap and a lifetime cap. Use the canonical values in the keyless section below; caps must be at least `20000` (0.02 USDC) per call to reach every endpoint. The budget is per client instance / process: not wallet-wide, not shared between processes, reset on a new instance or restart. Keyless requires the base URL exactly `https://madeonsol.com`. **API-key (`msk_`) users: no change, no new config.** HTTP mode still refuses wallet signers (SEC-02, unchanged).
+
 > **New in 2.0.0 — BREAKING: HTTP mode now requires a separate token (security fix, SEC-02).** If you run this server with `MCP_TRANSPORT=http`, you must now also set `MCP_HTTP_TOKEN` (a random secret you generate) and send it as `Authorization: Bearer <token>` on **every** request, including `GET /health` and the server-card endpoint — previously, anything that could reach the bound port could call every tool using the operator's own API key with no authentication at all. HTTP mode is now hard-restricted to literal loopback (`127.0.0.1` / `::1`), rejects `Origin`/`X-Forwarded-*` headers and duplicate `Authorization`/`Host` headers outright, exposes only `POST /mcp` plus the two GET routes, and **refuses to start** if a wallet/payment signer is configured — HTTP mode can never carry a payer key. **If you use the default `stdio` transport (Claude Desktop, Cursor, most MCP clients), nothing changes — no action needed.** This is a single shared-operator-token fix, not a new multi-user or OAuth system; each HTTP caller still shares the operator's own MadeOnSol API key. Full writeup: `docs/audit/SEC02_PRIVATE_HTTP_MCP.md`.
 >
 > **New in 1.27.1 — the server now reports MCP `instructions`.** The `initialize` response's `instructions` field (operational guidance for the calling agent — distinct from this README/package description) was never set; directories that introspect the live server (Glama) reported "no recorded MCP instructions." No new tools; still 104 total.
@@ -99,7 +101,7 @@ Restart Claude Desktop and ask: *"What are KOLs buying right now?"*
 
 ## AI agent quickstart (x402 / pay-per-call)
 
-Building an autonomous agent? Skip the signup. Point a **funded Solana wallet** at the server and every tool call **auto-pays a micropayment** over [x402](https://x402.org) — no API key, no account, no rate-limit dance.
+Building an autonomous agent? Skip the signup. Configure a **funded Solana wallet** and an explicit payment budget. Paid tool calls authorize micropayments within that budget over [x402](https://x402.org) — no API key, no account, no rate-limit dance.
 
 ```json
 {
@@ -107,7 +109,12 @@ Building an autonomous agent? Skip the signup. Point a **funded Solana wallet** 
     "madeonsol": {
       "command": "mcp-server-madeonsol",
       "env": {
-        "SVM_PRIVATE_KEY": "<base58 solana private key>"
+        "SVM_PRIVATE_KEY": "<base58 solana private key>",
+        "X402_PAY_TO": "GLu63pRCYrp4BJu5P5ciYKxgeZFW9c8TJ8jWzK3TB9AR",
+        "X402_FEE_PAYER": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4",
+        "X402_MAX_AMOUNT_ATOMIC": "20000",
+        "X402_MAX_TOTAL_AMOUNT_ATOMIC": "1000000",
+        "SVM_RPC_URL": "https://<your-trusted-solana-rpc>"
       }
     }
   }
@@ -116,7 +123,7 @@ Building an autonomous agent? Skip the signup. Point a **funded Solana wallet** 
 
 How it works:
 
-- The wallet behind `SVM_PRIVATE_KEY` settles each request as a **USDC micropayment on Solana** (~$0.005–$0.02 per call, settled on-chain). No subscription, no quota.
+- The wallet behind `SVM_PRIVATE_KEY` settles each request as a **USDC micropayment on Solana** (~$0.005–$0.02 per call, settled on-chain). No subscription; the configured authorization budget bounds spending.
 - The keyless catalog covers **25 endpoints** — the latest additions: token candles ($0.01), almost-bonded ($0.01), top-traders ($0.02), cap-table ($0.02), sniper recent deploys ($0.01), token flow ($0.01), and deployer trajectory ($0.01).
 - The free **`madeonsol_discovery`** tool needs no auth and returns every endpoint with its exact per-call price — call it first to see what each tool costs.
 - Install the x402 peer deps alongside the server (only required for this mode):
@@ -128,6 +135,34 @@ How it works:
 > **Data only.** MadeOnSol returns trading *intelligence* — it never trades, signs swaps, or takes custody of funds. The only thing your wallet ever pays for is the per-call data fee.
 
 Prefer a fixed monthly bill, free tier, or no wallet? Use the developer path below.
+
+## Required payment policy (breaking keyless upgrade)
+
+Keyless Solana payments require an explicit trusted merchant, facilitator and authorization budget. API-key mode is unchanged and takes precedence over a configured wallet.
+
+Only exact payments in mainnet USDC are permitted. Set the two addresses from your trusted operator configuration, independently of a server challenge. `SVM_RPC_URL` must be your trusted HTTPS RPC; there is no public RPC fallback. The agent wallet cannot also be the facilitator fee payer.
+
+| Setting | Meaning |
+|---|---|
+| `X402_PAY_TO` | Trusted merchant wallet receiving USDC |
+| `X402_FEE_PAYER` | Trusted facilitator wallet paying transaction fees |
+| `X402_MAX_AMOUNT_ATOMIC` | Maximum per payment, as a positive integer string |
+| `X402_MAX_TOTAL_AMOUNT_ATOMIC` | Lifetime authorization allowance, as a positive integer string |
+| `SVM_RPC_URL` | Explicit trusted HTTPS Solana RPC URL |
+
+USDC uses 6 decimals: `20000` = 0.02 USDC and `1000000` = 1 USDC. Choose limits that cover the endpoints you intend to use; these examples are not a price guarantee.
+
+**Canonical MadeOnSol values (Solana mainnet USDC).** Pinned here (GitHub + npm README) so you do not have to take them from a 402:
+- merchant `payTo` / `X402_PAY_TO`: `GLu63pRCYrp4BJu5P5ciYKxgeZFW9c8TJ8jWzK3TB9AR` (also shown on https://madeonsol.com/x402 and https://madeonsol.com/.well-known/x402)
+- facilitator `feePayer` / `X402_FEE_PAYER`: `2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4`. This is the fee payer of **PayAI**, the third-party facilitator MadeOnSol's Solana rail uses. If PayAI rotates it, keyless calls fail closed (the client refuses to sign) until you update this value; a MadeOnSol release will announce the new one.
+- prices: Solana legs are 5000–20000 atomic (0.005–0.02 USDC), so `maxAmountAtomic` / `X402_MAX_AMOUNT_ATOMIC` must be at least `20000` to reach every endpoint.
+
+The budget is per client instance / process: not wallet-wide, not shared between processes, reset when a new instance or process starts. Keyless mode requires the base URL exactly `https://madeonsol.com`.
+
+
+The allowance is reserved before concurrent calls can approve/sign. An unsigned denial releases it; entering payment creation retains it even if RPC, signing or the paid response fails. It measures **authorized attempts, not settled spend**. There is no automatic refund or payment replay. A timeout cannot undo a proof already sent.
+
+The allowance is per server process; restarting starts a new allowance. Reuse the running process. Multiple MCP servers or other clients sharing a wallet need an external shared budget. Missing/invalid keyless settings stop startup; wallet signing remains restricted to stdio. The payment attempt timeout defaults to 30 seconds.
 
 ## Authentication
 
@@ -389,3 +424,4 @@ Free tier returns the full REST response shape on 40+ endpoints — real wallets
 ## License
 
 MIT
+
