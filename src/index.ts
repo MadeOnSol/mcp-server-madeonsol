@@ -576,7 +576,7 @@ function registerTools(server: McpServer) {
     if (hasRestAuth) {
       server.tool(
         "madeonsol_wallet_tracker_watchlist",
-        "List your tracked wallets with labels and remaining watchlist capacity. BASIC=10, PRO=50, ULTRA=100.",
+        "List your tracked wallets with labels and remaining watchlist capacity. PRO 50, ULTRA 100, BUSINESS 500 wallets (the Free tier has no wallet tracker).",
         {},
         { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
         async () => ({
@@ -626,20 +626,24 @@ function registerTools(server: McpServer) {
 
       server.tool(
         "madeonsol_wallet_tracker_trades",
-        "Historical swap and transfer events for all your watched wallets. BASIC: truncated wallets, no tx_signature.",
+        "Historical swap and transfer events for all your watched wallets (PRO+). Returns { events[], count, ordered_by, next_cursor, next_cursor_slot }; each event has wallet_address, label, event_type, action (buy/sell on swaps, null on transfers), token_mint/symbol/name, sol_amount, token_amount, tx_signature, block_time (ingest clock), slot (chain order), replayed, ingested_at. Page with before_slot = next_cursor_slot (order=slot, the default) or before = next_cursor (order=block_time).",
         {
           wallet: z.string().optional().describe("Filter to a specific wallet address"),
-          action: z.enum(["buy", "sell", "transfer_in", "transfer_out"]).optional().describe("Filter by action type"),
+          action: z.enum(["buy", "sell"]).optional().describe("Swaps only: buy or sell. Transfers have action null; select them with event_type='transfer'"),
           event_type: z.enum(["swap", "transfer"]).optional().describe("Filter by event type: swap (token trade) or transfer (SOL moved)"),
           limit: z.number().min(1).max(200).default(50).describe("Max results (1–200)"),
-          before: z.number().optional().describe("Pagination cursor: block_time of the last event from previous page"),
+          order: z.enum(["slot", "block_time"]).optional().describe("Sort by on-chain slot (default on a first page) or by block_time, the ingest clock (default when 'before' is passed)"),
+          before_slot: z.number().int().optional().describe("Cursor for order=slot: next_cursor_slot of the previous page"),
+          before: z.number().optional().describe("Legacy cursor for order=block_time: next_cursor of the previous page"),
         },
         { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-        async ({ wallet, action, event_type, limit, before }) => {
+        async ({ wallet, action, event_type, limit, order, before_slot, before }) => {
           const params: Record<string, string | number> = { limit };
           if (wallet) params.wallet = wallet;
           if (action) params.action = action;
           if (event_type) params.event_type = event_type;
+          if (order) params.order = order;
+          if (before_slot !== undefined) params.before_slot = before_slot;
           if (before !== undefined) params.before = before;
           const url = new URL(`${BASE_URL}/api/v1/wallet-tracker/trades`);
           for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
@@ -868,13 +872,14 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_test_webhook",
-      "Send a sample event payload to a webhook URL to verify it works. Returns status code and response time.",
+      "Send a sample event payload to a webhook URL to verify it works. Returns status code, response time and (newer servers) the event type sampled.",
       {
         webhook_id: z.number().describe("ID of the webhook to test"),
+        event: z.string().optional().describe("Which of the webhook's subscribed events to sample (e.g. 'kol:trade', 'wallet_tracker:event'). Omit for the first subscribed event; an unsubscribed event is answered with 400."),
       },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      async ({ webhook_id }) => ({
-        content: [{ type: "text" as const, text: await restQuery("POST", "/webhooks/test", { webhook_id }) }],
+      async ({ webhook_id, event }) => ({
+        content: [{ type: "text" as const, text: await restQuery("POST", "/webhooks/test", event ? { webhook_id, event } : { webhook_id }) }],
       })
     );
 
@@ -1415,11 +1420,22 @@ function registerTools(server: McpServer) {
       })
     );
 
-    // ── Copy-Trade rules (PRO/ULTRA) ──
+    // ── Copy-Trade rules (PRO+) ──
+    //
+    // Tier limits (rules per account, source wallets per rule) are enforced by
+    // the SERVER per tier: copytradeLimits() in the API (PRO 3×5, ULTRA 20×50,
+    // BUSINESS 100×250, ENTERPRISE = BUSINESS). The schema below only carries the
+    // structural ceiling so it never rejects a valid request from the highest
+    // tier before the server can answer; a smaller tier gets the server's 400.
+    const COPYTRADE_SOURCE_WALLETS_MAX = 250;
+    const COPYTRADE_SCOPE_NOTE =
+      "source_wallets must be wallets MadeOnSol tracks as KOLs (the roster at GET /api/v1/kol/wallets): any valid Solana address is accepted into a rule, but signals fire only for trades by tracked KOL wallets, so an untracked wallet never produces a signal.";
+    const MC_BAND_NOTE =
+      "Market-cap band in USD (0 to 1e12, min <= max) on the source trade's market cap at trade time; when a bound is set, trades with an unknown market cap are dropped.";
 
     server.tool(
       "madeonsol_copytrade_list",
-      "List your copy-trade rules. PRO=3 rules, ULTRA=20 rules.",
+      "List your copy-trade rules. Rule limits: PRO 3, ULTRA 20, BUSINESS 100 (Enterprise follows Business).",
       {},
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async () => ({
@@ -1429,21 +1445,23 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_copytrade_create",
-      "Create a copy-trade rule. Returns webhook_secret ONCE on creation when delivery_mode includes 'webhook' — store it to verify HMAC signatures. PRO=5 source_wallets/rule, ULTRA=50.",
+      `Create a copy-trade rule. Returns webhook_secret ONCE on creation when delivery_mode includes 'webhook' — store it to verify HMAC signatures. Source wallets per rule: PRO 5, ULTRA 50, BUSINESS 250 (Enterprise follows Business); the server enforces your tier's limit. Responses may carry source_wallets_tracked / source_wallets_untracked and warnings[] (code untracked_source_wallets or source_wallet_tracking_unavailable). ${COPYTRADE_SCOPE_NOTE}`,
       {
-        source_wallets: z.array(z.string()).min(1).max(50).describe("Wallets to mirror (base58)"),
-        sizing_amount: z.number().describe("Amount used by the chosen sizing_mode"),
+        source_wallets: z.array(z.string()).min(1).max(COPYTRADE_SOURCE_WALLETS_MAX).describe("Tracked KOL wallets to mirror (base58). Per-rule limit depends on tier (PRO 5, ULTRA 50, BUSINESS 250); the server rejects more than yours."),
+        sizing_amount: z.number().describe("SOL when sizing_mode is 'fixed'; otherwise a multiplier / fraction of the source size (0.25 = a quarter), never a percent"),
         name: z.string().optional().describe("Optional human label"),
         min_trade_sol: z.number().optional().describe("Minimum source-wallet trade size to fire a signal"),
-        only_action: z.enum(["buy", "sell", "both"]).optional().describe("Filter to one side (default 'both')"),
-        sizing_mode: z.enum(["fixed", "proportional", "percent_source"]).optional().describe("How sizing_amount is interpreted"),
+        only_action: z.enum(["buy", "sell", "both"]).optional().describe("Which side fires a signal (default 'buy' when omitted)"),
+        sizing_mode: z.enum(["fixed", "proportional", "percent_source"]).optional().describe("'fixed' = sizing_amount SOL; 'proportional' and 'percent_source' both = source size × sizing_amount (default 'fixed')"),
         delivery_mode: z.enum(["webhook", "websocket", "both"]).optional().describe("Where to deliver fired signals"),
         webhook_url: z.string().url().optional().describe("Required when delivery_mode includes 'webhook'"),
+        min_mc_usd: z.number().min(0).max(1e12).nullable().optional().describe(`Lower bound. ${MC_BAND_NOTE}`),
+        max_mc_usd: z.number().min(0).max(1e12).nullable().optional().describe(`Upper bound. ${MC_BAND_NOTE}`),
       },
       { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       async (args) => {
         const body: Record<string, unknown> = { source_wallets: args.source_wallets, sizing_amount: args.sizing_amount };
-        for (const k of ["name", "min_trade_sol", "only_action", "sizing_mode", "delivery_mode", "webhook_url"] as const) {
+        for (const k of ["name", "min_trade_sol", "only_action", "sizing_mode", "delivery_mode", "webhook_url", "min_mc_usd", "max_mc_usd"] as const) {
           if (args[k] !== undefined) body[k] = args[k];
         }
         return { content: [{ type: "text" as const, text: await restQuery("POST", "/copytrade/subscriptions", body) }] };
@@ -1462,11 +1480,11 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_copytrade_update",
-      "Update fields on a copy-trade rule, including is_active toggle.",
+      `Update fields on a copy-trade rule, including is_active toggle. Omit a field to leave it unchanged; pass null to clear an MC bound. If this update sets a webhook_url on a rule that had no signing secret yet (e.g. a websocket-only rule), the response returns webhook_secret ONCE — store it; an existing secret is never re-shown. Responses may carry source_wallets_tracked / source_wallets_untracked and warnings[] (code untracked_source_wallets or source_wallet_tracking_unavailable): tell the user which wallets can never fire. ${COPYTRADE_SCOPE_NOTE}`,
       {
         id: z.number().describe("Subscription id"),
         name: z.string().nullable().optional(),
-        source_wallets: z.array(z.string()).optional(),
+        source_wallets: z.array(z.string()).min(1).max(COPYTRADE_SOURCE_WALLETS_MAX).optional().describe("Replaces the rule's wallets. Per-rule limit depends on tier (PRO 5, ULTRA 50, BUSINESS 250)."),
         min_trade_sol: z.number().optional(),
         only_action: z.enum(["buy", "sell", "both"]).optional(),
         sizing_mode: z.enum(["fixed", "proportional", "percent_source"]).optional(),
@@ -1474,6 +1492,8 @@ function registerTools(server: McpServer) {
         delivery_mode: z.enum(["webhook", "websocket", "both"]).optional(),
         webhook_url: z.string().url().nullable().optional(),
         is_active: z.boolean().optional(),
+        min_mc_usd: z.number().min(0).max(1e12).nullable().optional().describe(`Lower bound (null clears it). ${MC_BAND_NOTE}`),
+        max_mc_usd: z.number().min(0).max(1e12).nullable().optional().describe(`Upper bound (null clears it). ${MC_BAND_NOTE}`),
       },
       { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       async ({ id, ...patch }) => {
@@ -1497,18 +1517,22 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_copytrade_signals",
-      "Recent fired copy-trade signals (up to 7 days). Filter by subscription_id, since (ISO8601), and limit (1–500).",
+      "Recent fired copy-trade signals (up to 7 days). Filter by subscription_id, since (ISO8601), limit (1–500), and min_mc_usd / max_mc_usd on the source trade's market cap.",
       {
         subscription_id: z.number().optional().describe("Filter to one rule"),
         since: z.string().optional().describe("ISO8601 timestamp — only signals fired at-or-after this time"),
         limit: z.number().min(1).max(500).default(50).describe("Max signals to return (1–500)"),
+        min_mc_usd: z.number().min(0).max(1e12).optional().describe("Keep signals whose source trade's market cap (USD) was at least this; drops unknown-MC signals"),
+        max_mc_usd: z.number().min(0).max(1e12).optional().describe("Keep signals whose source trade's market cap (USD) was at most this; drops unknown-MC signals"),
       },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      async ({ subscription_id, since, limit }) => {
+      async ({ subscription_id, since, limit, min_mc_usd, max_mc_usd }) => {
         const url = new URL(`${BASE_URL}/api/v1/copytrade/signals`);
         url.searchParams.set("limit", String(limit));
         if (subscription_id !== undefined) url.searchParams.set("subscription_id", String(subscription_id));
         if (since) url.searchParams.set("since", since);
+        if (min_mc_usd !== undefined) url.searchParams.set("min_mc_usd", String(min_mc_usd));
+        if (max_mc_usd !== undefined) url.searchParams.set("max_mc_usd", String(max_mc_usd));
         const res = await fetch(url.toString(), { headers: { "Content-Type": "application/json", ...apiKeyHeaders() } });
         const text = res.ok ? JSON.stringify(await res.json(), null, 2) : `Error ${res.status}: ${await res.text().catch(() => "")}`;
         return { content: [{ type: "text" as const, text }] };
@@ -1993,12 +2017,12 @@ async function main() {
             { name: "madeonsol_tokens_batch_risk", description: "Bulk rug-risk/safety scoring for up to 50 mints — same shape as madeonsol_token_risk + as_of; untracked mints don't fail the batch. PRO+." },
             { name: "madeonsol_token_get", description: "Comprehensive per-mint snapshot: price, MC, volume, deployer, KOL, age, blacklist." },
             { name: "madeonsol_token_batch", description: "Bulk token snapshot for up to 50 mints — ~10-20× cheaper than N sequential calls." },
-            { name: "madeonsol_copytrade_list", description: "List your copy-trade rules. PRO/ULTRA." },
-            { name: "madeonsol_copytrade_create", description: "Create a copy-trade rule with webhook + WS delivery. PRO/ULTRA." },
-            { name: "madeonsol_copytrade_get", description: "Get one copy-trade rule. PRO/ULTRA." },
-            { name: "madeonsol_copytrade_update", description: "Update a copy-trade rule. PRO/ULTRA." },
-            { name: "madeonsol_copytrade_delete", description: "Delete a copy-trade rule. PRO/ULTRA." },
-            { name: "madeonsol_copytrade_signals", description: "Recent fired copy-trade signals (up to 7 days). PRO/ULTRA." },
+            { name: "madeonsol_copytrade_list", description: "List your copy-trade rules. PRO+." },
+            { name: "madeonsol_copytrade_create", description: "Create a copy-trade rule with webhook + WS delivery. PRO+." },
+            { name: "madeonsol_copytrade_get", description: "Get one copy-trade rule. PRO+." },
+            { name: "madeonsol_copytrade_update", description: "Update a copy-trade rule. PRO+." },
+            { name: "madeonsol_copytrade_delete", description: "Delete a copy-trade rule. PRO+." },
+            { name: "madeonsol_copytrade_signals", description: "Recent fired copy-trade signals (up to 7 days). PRO+." },
             { name: "madeonsol_kol_first_touches", description: "Recent first-KOL-touch events on tokens — backtested scout signal. Filterable by scout tier S/A/B/C, KOL winrate, token age, mint suffix." },
             { name: "madeonsol_first_touch_subscriptions_list", description: "List your first-touch webhook subscriptions. ULTRA only." },
             { name: "madeonsol_first_touch_subscriptions_create", description: "Create a first-touch webhook subscription with HMAC signing. ULTRA only." },

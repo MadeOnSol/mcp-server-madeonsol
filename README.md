@@ -15,6 +15,8 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 
 > Real-time Solana trading intelligence: track 2,000+ KOL wallets with <3s latency on paid keys and x402 pay-per-call (free-tier live feeds are 5-min delayed), score 85K+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), verify any wallet's CURRENT on-chain holdings straight from its token accounts, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day across 40+ endpoints (live feeds 5-min delayed) — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
 
+> **New in 3.1.0 — copy-trade and Wallet Tracker tools match the API.** `madeonsol_copytrade_create` / `_update` accept up to 250 `source_wallets` (the BUSINESS per-rule limit; before, the tool refused anything over 50 before the server could answer). The server still enforces your own tier's limit (PRO 5, ULTRA 50, BUSINESS 250). Create, update and `madeonsol_copytrade_signals` gain the market-cap band `min_mc_usd` / `max_mc_usd`. The `only_action` description now states the real default (`buy`), and the tool descriptions say that signals fire only for tracked KOL wallets. `madeonsol_wallet_tracker_trades` gains `order` (`slot` | `block_time`) and the `before_slot` cursor, and its `action` filter is `buy` | `sell` only: `transfer_in` / `transfer_out` were always rejected by the API with 400. Use `event_type: "transfer"` for transfers. `madeonsol_copytrade_update` documents that a PATCH which sets a `webhook_url` on a rule without a signing secret returns `webhook_secret` once, and the copy-trade tools describe the `source_wallets_untracked` / `warnings[]` fields newer servers return. `madeonsol_test_webhook` gains an optional `event` (which subscribed event to sample).
+
 > **New in 3.0.0 — BREAKING for x402 (keyless) mode only: five env vars are now required and startup FAILS instead of silently degrading (security fix, SDK-01).** Set `X402_PAY_TO`, `X402_FEE_PAYER`, `X402_MAX_AMOUNT_ATOMIC`, `X402_MAX_TOTAL_AMOUNT_ATOMIC` and `SVM_RPC_URL` alongside `SVM_PRIVATE_KEY`. Before, keyless mode signed whatever Solana USDC amount, recipient and fee payer a 402 challenge asked for. Now every challenge is checked BEFORE signing against a trusted merchant `payTo`, a trusted facilitator `feePayer` (which must differ from your wallet), the USDC mint, `solana:5eykt…` mainnet, the `exact` scheme, a per-call cap and a lifetime cap. Use the canonical values in the keyless section below; caps must be at least `20000` (0.02 USDC) per call to reach every endpoint. The budget is per client instance / process: not wallet-wide, not shared between processes, reset on a new instance or restart. Keyless requires the base URL exactly `https://madeonsol.com`. **API-key (`msk_`) users: no change, no new config.** HTTP mode still refuses wallet signers (SEC-02, unchanged).
 
 > **New in 2.0.0 — BREAKING: HTTP mode now requires a separate token (security fix, SEC-02).** If you run this server with `MCP_TRANSPORT=http`, you must now also set `MCP_HTTP_TOKEN` (a random secret you generate) and send it as `Authorization: Bearer <token>` on **every** request, including `GET /health` and the server-card endpoint — previously, anything that could reach the bound port could call every tool using the operator's own API key with no authentication at all. HTTP mode is now hard-restricted to literal loopback (`127.0.0.1` / `::1`), rejects `Origin`/`X-Forwarded-*` headers and duplicate `Authorization`/`Host` headers outright, exposes only `POST /mcp` plus the two GET routes, and **refuses to start** if a wallet/payment signer is configured — HTTP mode can never carry a payer key. **If you use the default `stdio` transport (Claude Desktop, Cursor, most MCP clients), nothing changes — no action needed.** This is a single shared-operator-token fix, not a new multi-user or OAuth system; each HTTP caller still shares the operator's own MadeOnSol API key. Full writeup: `docs/audit/SEC02_PRIVATE_HTTP_MCP.md`.
@@ -261,10 +263,10 @@ Pre-confirm pump.fun deploy feed reconstructed from shred-level (**deshred**) da
 
 | Tool | Description |
 |---|---|
-| `madeonsol_wallet_tracker_watchlist` | List your tracked wallets and remaining capacity (Free: 10, Pro: 50, Ultra: 100) |
+| `madeonsol_wallet_tracker_watchlist` | List your tracked wallets and remaining capacity (Pro: 50, Ultra: 100, Business: 500; the Free tier has no wallet tracker) |
 | `madeonsol_wallet_tracker_add` | Add a wallet to your watchlist |
 | `madeonsol_wallet_tracker_remove` | Remove a wallet from your watchlist |
-| `madeonsol_wallet_tracker_trades` | Historical swap/transfer events for watched wallets (120-day retention) |
+| `madeonsol_wallet_tracker_trades` | Historical swap/transfer events for watched wallets (120-day retention). Returns `events[]` + `next_cursor` / `next_cursor_slot`. `action` is `buy` or `sell` (swaps only; transfers have `action: null`, select them with `event_type: transfer`). `order` = `slot` (default) or `block_time`; page with `before_slot` or the legacy `before` |
 | `madeonsol_wallet_tracker_summary` | Per-wallet stats: swap counts, SOL bought/sold, last event |
 
 ### Universal Wallet *(new in 1.8 — any wallet, not just curated KOLs, PRO+)*
@@ -314,18 +316,18 @@ Scored from 1.5M+ early-buyer records (wallets seen in the first 20 buyers of Pu
 | `madeonsol_token_flow` | PRO+ | Trade-flow aggregate (organic-vs-fake volume) over a 1h/24h `window` — unique wallets/buyers/sellers, buy/sell counts + SOL, `net_sol`, `trades_per_wallet` wash-trading proxy |
 | `madeonsol_token_trades` | **New 1.19** · PRO+ | Mint-scoped trade tape — cursor-paginated raw trades for one token (action / wallet / since–until filters, default FULL history). History starts 2026-04-12; `coverage` block marks scope |
 
-### Copy-Trade Rules (PRO/ULTRA)
+### Copy-Trade Rules (PRO+)
 
-Server-side rules that fire signals when a watched source wallet trades. Delivered via webhook (HMAC-signed) and/or WebSocket.
+Server-side rules that fire signals when a source wallet trades. Delivered via webhook (HMAC-signed) and/or WebSocket. Limits: PRO 3 rules × 5 source wallets, ULTRA 20 × 50, BUSINESS 100 × 250 (Enterprise follows Business). The server enforces your tier's limit. Signals fire only for trades by wallets MadeOnSol tracks as KOLs (the roster at `GET /api/v1/kol/wallets`): a rule accepts any valid Solana address, but an untracked wallet never produces a signal. `only_action` defaults to `buy`. `min_mc_usd` / `max_mc_usd` restrict a rule (or the signals query) to a market-cap band on the source trade; when a bound is set, trades with an unknown market cap are dropped.
 
 | Tool | Description |
 |---|---|
 | `madeonsol_copytrade_list` | List your rules |
-| `madeonsol_copytrade_create` | Create a rule. Returns `webhook_secret` once — store it |
+| `madeonsol_copytrade_create` | Create a rule (optional `min_mc_usd` / `max_mc_usd`). Returns `webhook_secret` once — store it |
 | `madeonsol_copytrade_get` | Get one rule |
-| `madeonsol_copytrade_update` | Update fields or toggle `is_active` |
+| `madeonsol_copytrade_update` | Update fields or toggle `is_active`; `null` clears an MC bound |
 | `madeonsol_copytrade_delete` | Delete permanently |
-| `madeonsol_copytrade_signals` | Recent fired signals (up to 7 days) |
+| `madeonsol_copytrade_signals` | Recent fired signals (up to 7 days). Filters `subscription_id`, `since`, `limit`, `min_mc_usd` / `max_mc_usd` |
 
 ### KOL Coordination Alerts (PRO/ULTRA — v1.1 push signals)
 
