@@ -1,5 +1,6 @@
 // Canonical source. Mirrored into the two Solana adapters by
 // packages/sync-solana-payment.mjs; CI rejects drift between published copies.
+import { createRecoveringFetch } from "./x402-recovery.js";
 export const SOLANA_PAYMENT_NETWORK = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 export const SOLANA_PAYMENT_ASSET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 function fail(message) { throw new Error(`Solana payment policy: ${message}`); }
@@ -162,8 +163,13 @@ async function challengeBody(response) {
         return fail("invalid payment challenge JSON");
     }
 }
-/** One challenge and at most one paid request. No automatic payment replay. */
-export async function createSolanaPaidFetch(privateKey, budget, baseUrl, transport = fetch) {
+/**
+ * One challenge and at most one payment. No new payment is ever created for a
+ * request whose proof was sent: a lost or pending paid answer is recovered
+ * with the SAME proof and a payer-signed PAYMENT-RECOVERY header (PAY-05),
+ * bounded by `recovery`. Recovery sends consume no budget.
+ */
+export async function createSolanaPaidFetch(privateKey, budget, baseUrl, transport = fetch, recovery = {}) {
     const origin = httpsUrl(baseUrl).origin;
     const { x402Client, x402HTTPClient } = await import("@x402/core/client");
     const { ExactSvmScheme } = await import("@x402/svm/exact/client");
@@ -172,6 +178,11 @@ export async function createSolanaPaidFetch(privateKey, budget, baseUrl, transpo
     const signer = await createKeyPairSignerFromBytes(base58.decode(privateKey));
     if (signer.address === budget.policy.feePayer)
         fail("the agent wallet cannot pay facilitator gas");
+    // PAY-05 recovery signature: ed25519 by the payer key over the UTF-8 message, base58.
+    const signRecovery = async (message) => base58.encode(new Uint8Array(await globalThis.crypto.subtle.sign("Ed25519", signer.keyPair.privateKey, new TextEncoder().encode(message))));
+    const paidTransport = createRecoveringFetch(transport, {
+        attemptTimeoutMs: budget.policy.timeoutMs, ...recovery, rail: "solana", sign: signRecovery,
+    });
     return async (input, init) => {
         const original = new Request(input, init);
         if (httpsUrl(original.url).origin !== origin)
@@ -246,7 +257,11 @@ export async function createSolanaPaidFetch(privateKey, budget, baseUrl, transpo
             check();
             for (const [name, value] of Object.entries(http.encodePaymentSignatureHeader(payload)))
                 retry.headers.set(name, value);
-            return await bounded(transport(retry));
+            // The deadline bounds everything up to SUBMISSION. Once the proof is sent it
+            // may settle, so each send gets its own timeout and a lost answer is
+            // recovered with this exact proof; only the caller's own signal stops it.
+            clearTimeout(timer);
+            return await paidTransport(new Request(retry, { signal: original.signal }));
         }
         finally {
             if (!creating)

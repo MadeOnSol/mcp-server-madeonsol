@@ -1,3 +1,4 @@
+import { type RecoveryOptions } from "./x402-recovery.js";
 export declare const SOLANA_PAYMENT_NETWORK = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 export declare const SOLANA_PAYMENT_ASSET = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 interface ApprovedOffer {
@@ -54,6 +55,11 @@ export declare class SolanaPaymentBudget {
     reserve(atomic: string): () => void;
 }
 export declare function solanaPaymentPolicyFromConfig(get: (key: string) => string | undefined): SolanaPaymentPolicy;
-/** One challenge and at most one paid request. No automatic payment replay. */
-export declare function createSolanaPaidFetch(privateKey: string, budget: SolanaPaymentBudget, baseUrl: string, transport?: typeof fetch): Promise<typeof fetch>;
+/**
+ * One challenge and at most one payment. No new payment is ever created for a
+ * request whose proof was sent: a lost or pending paid answer is recovered
+ * with the SAME proof and a payer-signed PAYMENT-RECOVERY header (PAY-05),
+ * bounded by `recovery`. Recovery sends consume no budget.
+ */
+export declare function createSolanaPaidFetch(privateKey: string, budget: SolanaPaymentBudget, baseUrl: string, transport?: typeof fetch, recovery?: RecoveryOptions): Promise<typeof fetch>;
 export {};

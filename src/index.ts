@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { SolanaPaymentBudget, createSolanaPaidFetch, solanaPaymentPolicyFromConfig } from "./solana-payment.js";
+import { readPaidResult, withPaidResult, x402PaymentErrorFrom } from "./x402-recovery.js";
 import { VERSION } from "./version.js";
 import { createPrivateHttpServer, readHttpConfig } from "./http-security.js";
 
@@ -96,9 +97,29 @@ async function query(path: string, params?: Record<string, string | number>) {
     }
   }
   const headers = apiKeyHeaders();
-  const res = authMode === "x402"
-    ? await paidFetch(url.toString())
-    : await fetch(url.toString(), { headers });
+  if (authMode === "x402") {
+    // PAY-05: the paid fetch already recovered with the SAME proof (bounded,
+    // payer-signed PAYMENT-RECOVERY, zero new budget). What is left is either a
+    // final answer or a coded state the agent must see — never a silent repay.
+    const res = await paidFetch(url.toString());
+    const provenance = readPaidResult(res);
+    if (!res.ok) {
+      const err = await x402PaymentErrorFrom(res, (body) => `Error ${res.status}: ${body}`);
+      return `${err.message}
+` + JSON.stringify({ x402_payment_error: {
+        status: err.status, code: err.code, reason: err.reason, payment_status: err.paymentStatus,
+        payment_id: err.paymentId, request_hash: err.requestHash, retry_after_seconds: err.retryAfterSeconds,
+        still_recoverable_with_same_payment: err.retryable, new_payment_allowed: err.newPaymentAllowed,
+        guidance: err.newPaymentAllowed
+          ? "Proven not paid: a new payment is safe if you still want this data."
+          : err.retryable
+            ? "Paid or possibly paid; bounded recovery with the same payment is exhausted for this call. Calling the tool again creates a NEW payment. Do not do that automatically; report payment_id."
+            : "Final. Do NOT pay again for this request; report payment_id for manual handling.",
+      } }, null, 2);
+    }
+    return JSON.stringify(withPaidResult(await res.json(), provenance), null, 2);
+  }
+  const res = await fetch(url.toString(), { headers });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     return `Error ${res.status}: ${body}`;
@@ -1225,7 +1246,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_token_depth",
-      "Per-pool price-impact / slippage for a token — answers 'how much SOL moves this token's price N%' and the impact of each buy size, per pool (NOT router-optimal). Each computable pool returns spot_price_sol, fee_pct, a quotes[] entry per requested SOL size (size_sol, tokens_out, avg_price_sol, price_impact_pct), and to_move_price — the SOL required to move price 1%/5%/10%. Constant-product AMMs are served from stream reserves (source=stream, with reserves_age_ms); pump.fun/bonk bonding curves from a LIVE read of the curve's virtual reserves (source=live_rpc). Pools that can't be priced honestly — concentrated CLMM/Orca/DLMM, Meteora-DBC curves, unclassified models — come back in unsupported_pools[] with a reason (e.g. concentrated_liquidity_depth_not_supported, curve_graduated_use_amm_pool) instead of a wrong number. primary_pool = deepest computable pool; found=false means no pools tracked. PRO/ULTRA only — BASIC receives HTTP 403.",
+      "Per-pool price-impact / slippage for a token — answers 'how much SOL moves this token's price N%' and the impact of each buy size, per pool (NOT router-optimal). Each computable pool returns spot_price_sol, fee_pct, a quotes[] entry per requested SOL size (size_sol, tokens_out, avg_price_sol, price_impact_pct), and to_move_price — the SOL required to move price 1%/5%/10%. Constant-product AMMs are served from stream reserves (source=stream, with reserves_age_ms); pump.fun/bonk bonding curves from a LIVE read of the curve's virtual reserves (source=live_rpc). Pools that can't be priced honestly — concentrated CLMM/Orca/DLMM, Meteora-DBC curves, unclassified models — come back in unsupported_pools[] with a reason (e.g. concentrated_liquidity_depth_not_supported, curve_graduated_use_amm_pool) instead of a wrong number. primary_pool = deepest computable pool; found=false means no pool with sufficient authoritative data for depth (see unsupported_pools[].reason; tracked pools may still be listed there). PRO/ULTRA only — BASIC receives HTTP 403.",
       {
         mint: z.string().describe("Token mint address (base58)"),
         sizes: z.array(z.number().gt(0).max(10000)).min(1).max(8).optional()
