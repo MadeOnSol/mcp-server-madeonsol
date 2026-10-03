@@ -1,10 +1,20 @@
 name: Publish to MCP Registry
 
 # Publishes server.json to registry.modelcontextprotocol.io.
-# The npm package (mcp-server-madeonsol) is published separately via the main
-# release flow, so this workflow only does the MCP-registry publish step.
-# Auth is GitHub OIDC — no secrets needed; the io.github.madeonsol/* namespace
-# is verified automatically because this workflow runs in madeonsol's repo.
+# The npm package is published separately via the main release flow
+# (MadeOnSol monorepo scripts/release-sdks.sh), so this workflow only does the
+# MCP-registry publish step. Auth is GitHub OIDC — no secrets needed; the
+# io.github.MadeOnSol/* namespace is verified because this runs in MadeOnSol's repo.
+#
+# Guards (added 2026-10-03 — every tag from 2026-09-18 on failed with
+# "cannot publish duplicate version" because server.json was not synced):
+#   * server.json version == packages[].version == package.json version
+#     (== the tag, on a tag push); glama.json too when it carries a version.
+#     A mismatch FAILS before anything is published — a stale server.json is
+#     never published.
+#   * the npm package must already carry that version (the registry validates it).
+#   * if the registry already lists that exact version, the job SUCCEEDS without
+#     publishing, so reruns and re-dispatches are safe.
 
 on:
   workflow_dispatch: {}
@@ -21,12 +31,56 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Verify versions + registry state
+        id: check
+        run: |
+          set -euo pipefail
+          PKG_NAME="$(jq -r .name package.json)"
+          PKG_VER="$(jq -r .version package.json)"
+          MCP_NAME="$(jq -r '.mcpName // empty' package.json)"
+          SJ_NAME="$(jq -r .name server.json)"
+          SJ_VER="$(jq -r .version server.json)"
+          fail=0
+          if [ "$SJ_VER" != "$PKG_VER" ]; then
+            echo "::error file=server.json::server.json version $SJ_VER != package.json version $PKG_VER — sync server.json from the monorepo (packages/$PKG_NAME/server.json)"; fail=1
+          fi
+          while IFS=$'\t' read -r ident ver; do
+            [ "$ident" = "$PKG_NAME" ] || { echo "::error file=server.json::packages[].identifier $ident != package.json name $PKG_NAME"; fail=1; }
+            [ "$ver" = "$PKG_VER" ] || { echo "::error file=server.json::packages[$ident].version $ver != package.json version $PKG_VER"; fail=1; }
+          done < <(jq -r '.packages[] | select(.registryType=="npm") | [.identifier, .version] | @tsv' server.json)
+          [ "$MCP_NAME" = "$SJ_NAME" ] || { echo "::error file=package.json::mcpName '$MCP_NAME' != server.json name '$SJ_NAME'"; fail=1; }
+          if [ -f glama.json ]; then
+            GV="$(jq -r '.version // empty' glama.json)"
+            if [ -n "$GV" ] && [ "$GV" != "$PKG_VER" ]; then echo "::error file=glama.json::glama.json version $GV != package.json version $PKG_VER"; fail=1; fi
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$PKG_VER" ]; then
+            echo "::error::tag $GITHUB_REF_NAME != v$PKG_VER (package.json)"; fail=1
+          fi
+          [ "$fail" = 0 ] || { echo "Refusing to publish: the manifests above disagree."; exit 1; }
+
+          # npm must already serve this version (the registry validates the package + mcpName).
+          if ! NPM_VER="$(npm view "$PKG_NAME@$PKG_VER" version 2>/dev/null)" || [ "$NPM_VER" != "$PKG_VER" ]; then
+            echo "::error::npm does not serve $PKG_NAME@$PKG_VER yet — publish the npm package first, then re-dispatch this workflow"; exit 1
+          fi
+
+          # Read-only: is this exact version already listed? 200 = yes → skip; 404 = publish.
+          URL="https://registry.modelcontextprotocol.io/v0/servers/${SJ_NAME//\//%2F}/versions/$PKG_VER"
+          CODE="$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' "$URL")"
+          case "$CODE" in
+            200) echo "$SJ_NAME $PKG_VER is already listed on the MCP Registry — nothing to publish."; echo "publish=false" >> "$GITHUB_OUTPUT" ;;
+            404) echo "$SJ_NAME $PKG_VER is not listed — publishing."; echo "publish=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "::error::MCP Registry lookup $URL returned HTTP $CODE — not publishing blind"; exit 1 ;;
+          esac
+
       - name: Install mcp-publisher
+        if: steps.check.outputs.publish == 'true'
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Authenticate (GitHub OIDC)
+        if: steps.check.outputs.publish == 'true'
         run: ./mcp-publisher login github-oidc
 
       - name: Publish server to MCP Registry
+        if: steps.check.outputs.publish == 'true'
         run: ./mcp-publisher publish
