@@ -167,7 +167,7 @@ function registerTools(server: McpServer) {
       min_kols: z.number().min(2).max(50).default(3).describe("Minimum number of KOLs converging on the same token"),
       limit: z.number().min(1).max(50).default(20).describe("Number of coordination signals to return"),
       min_avg_winrate: z.number().optional().describe("PRO+: require cluster avg winrate_7d >= N (0-100)"),
-      unique_strategies: z.number().optional().describe("PRO+: require >= N distinct strategies in cluster"),
+      unique_strategies: z.boolean().optional().describe("PRO+: true = require the cluster's KOLs to span distinct strategies"),
       include_majors: z.boolean().optional().describe("v1.1: include major memecoins (WIF/BONK/POPCAT). Default false."),
       window_minutes: z.number().min(1).max(60).optional().describe("v1.1: peak-density window (1-60). Default 15."),
       min_score: z.number().min(0).max(100).optional().describe("v1.1: minimum composite coordination_score (0-100)."),
@@ -176,7 +176,7 @@ function registerTools(server: McpServer) {
     async ({ period, min_kols, limit, min_avg_winrate, unique_strategies, include_majors, window_minutes, min_score }) => {
       const params: Record<string, string | number> = { period, min_kols, limit };
       if (min_avg_winrate !== undefined) params.min_avg_winrate = min_avg_winrate;
-      if (unique_strategies !== undefined) params.unique_strategies = unique_strategies;
+      if (unique_strategies !== undefined) params.unique_strategies = unique_strategies ? "true" : "false";
       if (include_majors !== undefined) params.include_majors = include_majors ? "true" : "false";
       if (window_minutes !== undefined) params.window_minutes = window_minutes;
       if (min_score !== undefined) params.min_score = min_score;
@@ -186,12 +186,12 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_kol_leaderboard",
-    "Get KOL performance rankings by PnL and win rate. PRO+ can sort by alternative axes (winrate/roi/profit_factor/early_entry).",
+    "Get KOL performance rankings by PnL and win rate. PRO+ can sort by alternative axes (winrate/volume/avg_roi/profit_factor/early_entry_pct/consistency).",
     {
       period: z.enum(["today", "7d", "30d", "90d", "180d"]).default("7d").describe("Time period (trade retention is 180d)"),
       limit: z.number().min(1).max(50).default(20).describe("Number of KOLs to return in ranking"),
-      sort: z.enum(["pnl", "winrate", "profit_factor", "roi", "early_entry"]).optional().describe("PRO+: sort axis (default 'pnl')"),
-      strategy: z.enum(["sniper", "flipper", "swinger", "holder", "mixed"]).optional().describe("PRO+: filter by strategy tag"),
+      sort: z.enum(["pnl", "winrate", "volume", "avg_roi", "profit_factor", "early_entry_pct", "consistency"]).optional().describe("PRO+: sort axis (default 'pnl')"),
+      strategy: z.enum(["scalper", "day_trader", "swing_trader", "hodler", "mixed"]).optional().describe("PRO+: filter by strategy tag"),
       min_winrate: z.number().optional().describe("PRO+: minimum winrate cutoff (0-100)"),
     },
     readOnlyAnnotations,
@@ -296,8 +296,8 @@ function registerTools(server: McpServer) {
     "madeonsol_deployer_leaderboard",
     "Pump.fun deployer reputation leaderboard, ranked by bonding rate, recent form, total bonded, or last deploy. Unranked deployers are excluded. IMPORTANT: compare bonding_rate (LIFETIME) against recent_bond_rate (ROLLING) — the gap between them is the signal, not either number alone; a deployer at 0.40 lifetime and 0.05 recent is cooling off. runner_rate (share of labeled tokens that ran rather than dumped) is only meaningful once labeled_tokens >= 3. Requires an msk_ key.",
     {
-      tier: z.enum(["elite", "good", "rising", "neutral", "spammer", "unranked"]).optional().describe("Restrict to one reputation grade"),
-      sort: z.enum(["bonding_rate", "recent", "total_bonded", "last_deploy"]).default("bonding_rate").describe("Ranking axis"),
+      tier: z.enum(["elite", "good", "moderate", "rising", "cold"]).optional().describe("Restrict to one reputation grade"),
+      sort: z.enum(["bonding_rate", "recent_bond_rate", "total_bonded", "last_deploy_at", "post_bond_survival_rate"]).default("bonding_rate").describe("Ranking axis"),
       limit: z.number().min(1).max(100).default(20).describe("Page size (1-100, default 20)"),
       offset: z.number().min(0).default(0).describe("Pagination offset"),
     },
@@ -373,7 +373,7 @@ function registerTools(server: McpServer) {
     {
       limit: z.number().min(1).max(100).default(20).describe("Page size (1-100, default 20)"),
       since: z.string().optional().describe("Incremental cursor — the previous response's next_since"),
-      tier: z.enum(["elite", "good", "rising", "neutral", "spammer", "unranked"]).optional().describe("Restrict to one deployer grade"),
+      tier: z.enum(["elite", "good", "moderate", "rising", "cold"]).optional().describe("Restrict to one deployer grade"),
       peak_mc_min: z.number().min(0).optional().describe("Floor on peak market cap (USD)"),
     },
     readOnlyAnnotations,
@@ -392,13 +392,13 @@ function registerTools(server: McpServer) {
       min_kols: z.number().min(1).max(20).default(1).describe("Minimum KOL buyers to include a token"),
       limit: z.number().min(1).max(50).default(20).describe("Number of hot tokens to return"),
       min_avg_winrate: z.number().optional().describe("PRO+: require avg winrate_7d of buyers >= N (0-100)"),
-      unique_strategies: z.number().optional().describe("PRO+: require >= N distinct strategies among buyers"),
+      unique_strategies: z.boolean().optional().describe("PRO+: true = require the buyers to span distinct strategies"),
     },
     readOnlyAnnotations,
     async ({ period, min_kols, limit, min_avg_winrate, unique_strategies }) => {
       const params: Record<string, string | number> = { period, min_kols, limit };
       if (min_avg_winrate !== undefined) params.min_avg_winrate = min_avg_winrate;
-      if (unique_strategies !== undefined) params.unique_strategies = unique_strategies;
+      if (unique_strategies !== undefined) params.unique_strategies = unique_strategies ? "true" : "false";
       return { content: [{ type: "text" as const, text: await query("/api/x402/kol/tokens/hot", params) }] };
     }
   );
@@ -1105,7 +1105,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_token_holders",
-      "Live holder census + concentration for a Solana token — WHO HOLDS NOW (madeonsol_token_cap_table is who bought first). Read live from the ledger at confirmed: every token account of the mint (mint-scoped getProgramAccounts), merged per owner, ranks 1–100 retained. concentration.holder_count is EXACT — distinct non-zero owners minus the excluded pools/curves/burns — and is null ONLY when the provider refuses the census for a mega-cap (TRUMP/JUP/BONK class): then source.method=getTokenLargestAccounts, source.census_fallback_reason is set and only the top-20 view is served; it is NEVER estimated from trades. Every disclosed owner carries labels[] from MadeOnSol wallet intelligence — deployer / kol / early_buyer / buyer / bundle / bot / dump_cluster (+ kol_name, early_buyer_rank, bot_confidence, historical_win_rate); an EMPTY labels[] means unknown to us, NOT verified clean. Liquidity pools, bonding curves, vaults and burn addresses are EXCLUDED from the circulating denominator and NAMED in excluded[] with reason = pool (dex + pool_address set) | bonding_curve (pump.fun/LaunchLab) | burn | program_account (off-curve owner we could not attribute); concentration splits them into pool_pct / burned_pct / program_pct (over TOTAL supply), while top1/top10/top20/top50/top100_share and deployer/kol/early_buyer/bundle/bot/dump_cluster_pct are over circulating (supply minus excluded). amount_raw / supply_raw / circulating_raw are raw u64 returned as decimal STRINGS — never coerce to a float. Disclosure is tier-gated: PRO ranks 1–10, ULTRA 1–50, BUSINESS 1–100 (the maths is tier-independent). Large established tokens take 5–30 s to enumerate upstream: the first call may return HTTP 503 with error_kind=holder_scan_in_progress and retry_after_seconds=20 — the scan keeps running and is cached, so retry after ~20 s and the answer is instant. 404 not_a_mint = not a mint on-chain; 503 holder_rpc_unavailable (retry 15 s) = we fail closed rather than guess. PRO+ — BASIC receives HTTP 403.",
+      "Live holder census + concentration for a Solana token — WHO HOLDS NOW (madeonsol_token_cap_table is who bought first). Read live from the ledger at confirmed: every token account of the mint (mint-scoped getProgramAccounts), merged per owner, ranks 1–100 retained. concentration.holder_count is EXACT — distinct non-zero owners minus the excluded pools/curves/burns — and is null ONLY when the census is not served (provider refusal for a TRUMP/JUP/BONK-class mega-cap, a timeout, or balances adding up to more than the mint supply): then source.method=getTokenLargestAccounts, source.census_fallback_reason is set and only the top-20 view is served; it is NEVER estimated from trades. Every disclosed owner carries labels[] from MadeOnSol wallet intelligence — deployer / kol / early_buyer / buyer / bundle / bot / dump_cluster (+ kol_name, early_buyer_rank, bot_confidence, historical_win_rate); an EMPTY labels[] means unknown to us, NOT verified clean. Liquidity pools, bonding curves, vaults and burn addresses are EXCLUDED from the circulating denominator and NAMED in excluded[] with reason = pool (dex + pool_address set) | bonding_curve (pump.fun/LaunchLab) | burn | program_account (off-curve owner we could not attribute); concentration splits them into pool_pct / burned_pct / program_pct (over TOTAL supply), while top1/top10/top20/top50/top100_share and deployer/kol/early_buyer/bundle/bot/dump_cluster_pct are over circulating (supply minus excluded). amount_raw / supply_raw / circulating_raw are raw u64 returned as decimal STRINGS — never coerce to a float. Disclosure is tier-gated: PRO ranks 1–10, ULTRA 1–50, BUSINESS 1–100 (the maths is tier-independent). Large established tokens take 5–30 s to enumerate upstream: the first call may return HTTP 503 with error_kind=holder_scan_in_progress and retry_after_seconds=20 — the scan keeps running and is cached, so retry after ~20 s and the answer is instant. 404 not_a_mint = not a mint on-chain; 503 holder_rpc_unavailable (retry 15 s) = we fail closed rather than guess. PRO+ — BASIC receives HTTP 403.",
       { mint: z.string().describe("Token mint address (base58)") },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ mint }) => ({
@@ -1115,7 +1115,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_token_locks",
-      "Token locks & vesting on ONE Solana mint — every on-chain lock / vesting contract from Streamflow, Jupiter Lock and Bonfida token-vesting, decoded from the locker programs' account state, plus a summary. Answers 'did the team lock, how much, until when, and can they pull it'. Each contract row: lock_account, program (streamflow | jupiter_lock | bonfida_vesting), kind (lock = whole amount at one date | vesting = cliff and/or periodic release), status (active | completed | cancelled | closed — derived at request time), sender (the locker; null for Bonfida), recipient, name, the schedule (start_at / cliff_at / end_at, period_seconds, continuous = per-second stream, amount_per_period_*, cliff_amount_*, perpetual), the terms (cancelable_by_sender — the locker can cancel, so funds are locked against the RECIPIENT not the locker; cancelable_by_recipient, transferable, can_topup) and a LIVE-derived view: locked_* (still locked right now), unlocked_*, withdrawn_* (claimed), claimable_* (unlocked but not withdrawn), next_unlock {at, kind cliff|period|final|tranche, amount}. summary: lock_count (exact), complete (false when the mint has >5000 contracts — totals then cover the newest 5000, rows_considered), active_count, by_program, by_kind, distinct_lockers, locked / deposited totals, unlocking_7d_* and unlocking_30d_* forward schedule, the nearest next_unlock across all contracts, active_cancelable_by_sender. Every *_raw amount is a base-unit digit STRING — never coerce to a float; ui (locked, amount…), *_usd and *_pct_of_supply are null when decimals / price are unknown (see token.facts_resolved). status/program filter the list only — the summary always covers all rows. LP LOCKS ARE NOT INCLUDED (this is token/vesting locks; LP locks are a separate feature). Poll for updates — claims/cancels are not pushed on the WebSocket. PRO+ — BASIC receives HTTP 403.",
+      "Token locks & vesting on ONE Solana mint — every on-chain lock / vesting contract from Streamflow, Jupiter Lock and Bonfida token-vesting, decoded from the locker programs' account state, plus a summary. Answers 'did the team lock, how much, until when, and can they pull it'. Each contract row: lock_account, program (streamflow | jupiter_lock | bonfida_vesting), kind (lock = whole amount at one date | vesting = cliff and/or periodic release), status (active | completed | cancelled | closed — derived at request time), sender (the locker; null for Bonfida), recipient, name, the schedule (start_at / cliff_at / end_at, period_seconds, continuous = per-second stream, amount_per_period_*, cliff_amount_*, perpetual), the terms (cancelable_by_sender — the locker can cancel, so funds are locked against the RECIPIENT not the locker; cancelable_by_recipient, transferable, can_topup) and a LIVE-derived view: locked_* (still locked right now), unlocked_*, withdrawn_* (claimed), claimable_* (unlocked but not withdrawn), next_unlock {at, kind cliff|period|final|tranche, amount}. summary: lock_count (exact), complete (false when the mint has >5000 contracts — totals then cover the newest 5000, rows_considered), active_count, by_program, by_kind, distinct_lockers, locked / deposited totals, unlocking_7d_* and unlocking_30d_* forward schedule, the nearest next_unlock across all contracts, active_cancelable_by_sender. Every *_raw amount is a base-unit digit STRING — never coerce to a float; ui (locked, amount…), *_usd and *_pct_of_supply are null when decimals / price are unknown (see token.facts_resolved). status/program filter the list only — the summary always covers all rows. LP LOCKS ARE NOT INCLUDED (this is token/vesting locks; LP locks are a separate feature). PROVENANCE (2026-10-02): every row has provider {id, name, identity verified|compatible|unverified, compatible_with, website_url, lock_url} (Streamflow / Jupiter Lock / Bonfida are identified by program id = verified; lock_url is always null on Solana, no per-lock URL format is proven, never construct one), explorer {lock_account_url, creation_tx_url} (Solana Explorer, cite these as evidence), price_usd (the price behind every *_usd), seconds_until_end (0 once completed, null when perpetual or cancelled/closed) and seconds_until_next_unlock. Claims / cancels / closes / unlocks are pushed on WS token:locks only with filters.lifecycle:true; otherwise poll. PRO+ — BASIC receives HTTP 403.",
       {
         mint: z.string().describe("Token mint address (base58)"),
         status: z.enum(["active", "completed", "cancelled", "closed"]).optional().describe("Filter the list by derived status (summary always covers all rows)"),
@@ -1135,10 +1135,11 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_token_locks_feed",
-      "Cross-token feed of NEW token lock / vesting contracts — who just locked tokens, of what mint, how much, until when — newest first, across ALL mints, from Streamflow, Jupiter Lock and Bonfida vesting. Each row has the same shape as a madeonsol_token_locks contract (lock_account, program, kind, status, sender, recipient, amount_* / locked_* / claimable_*, schedule, terms, next_unlock, created_at, tx_signature) plus token {symbol, name, decimals, price_usd, market_cap_usd}. Poll with since= (cursor = pagination.next_since) for new contracts, before= (pagination.next_before) to page back, or subscribe to the WebSocket channel 'token:locks' (event type 'token:lock', PRO+ stream token) for a push the moment the contract lands on-chain. Filters: mint, sender, recipient, program (streamflow | jupiter_lock | bonfida_vesting), kind (lock | vesting), status, min_usd (deposited amount ≥, needs a known price), min_pct_of_supply — the last three post-filter with a ×4 over-fetch, so a page may come back short. Backfilled Jupiter Lock rows have no on-chain creation time (created_at_estimated=true) and are EXCLUDED by default — include_estimated='1' to include them. Base-unit amounts are digit STRINGS; ui/usd/pct null when unknown. LP locks NOT included. PRO+ — BASIC receives HTTP 403.",
+      "Cross-token feed of NEW token lock / vesting contracts — who just locked tokens, of what mint, how much, until when — newest first, across ALL mints, from Streamflow, Jupiter Lock and Bonfida vesting. Each row has the same shape as a madeonsol_token_locks contract (lock_account, program, kind, status, sender, recipient, amount_* / locked_* / claimable_*, schedule, terms, next_unlock, created_at, tx_signature) plus token {symbol, name, decimals, price_usd, market_cap_usd}. Poll with since= (cursor = pagination.next_since) for new contracts, before= (pagination.next_before) to page back, or subscribe to the WebSocket channel 'token:locks' (event type 'token:lock', PRO+ stream token) for a push the moment the contract lands on-chain. Filters: mint, sender, recipient, program (streamflow | jupiter_lock | bonfida_vesting), kind (lock | vesting), status, min_usd (deposited amount ≥, needs a known price), min_pct_of_supply — the last three post-filter with a ×4 over-fetch, so a page may come back short. Backfilled Jupiter Lock rows have no on-chain creation time (created_at_estimated=true) and are EXCLUDED by default — include_estimated='1' to include them. Base-unit amounts are digit STRINGS; ui/usd/pct null when unknown. Rows carry the same provider / explorer / price_usd / seconds_until_* fields as madeonsol_token_locks. Page back with cursor (pagination.next_cursor, strict keyset, no skips) rather than before. LP locks NOT included. PRO+ — BASIC receives HTTP 403.",
       {
         since: z.string().optional().describe("ISO 8601 — only contracts created after this instant (use pagination.next_since to poll)"),
-        before: z.string().optional().describe("ISO 8601 — page back: only contracts created before this instant (pagination.next_before)"),
+        before: z.string().optional().describe("ISO 8601 — legacy page back: only contracts created before this instant (pagination.next_before; skips same-timestamp rows, prefer cursor)"),
+        cursor: z.string().optional().describe("pagination.next_cursor from the previous page: strict (created_at, id) keyset, no repeats, no skips. Not combinable with before"),
         mint: z.string().optional().describe("Filter by token mint"),
         sender: z.string().optional().describe("Filter by locker / creator wallet"),
         recipient: z.string().optional().describe("Filter by recipient wallet"),
@@ -1838,7 +1839,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_scout_leaderboard",
-      "Scout leaderboard — top KOLs ranked by scout score, first-touch frequency, and swarm attraction rate (% of first-touched tokens that attract 3+ follow-on KOLs within 4h). ULTRA only.",
+      "Scout leaderboard — top KOLs ranked by scout score, first-touch frequency, and swarm attraction rate (% of first-touched tokens that attract 3+ follow-on KOLs within 4h). PRO+ (was ULTRA until 2026-09-12).",
       {
         limit: z.number().min(1).max(100).optional().describe("Max entries to return"),
         scout_tier: z.enum(["S", "A", "B", "C"]).optional().describe("Filter to a specific scout tier"),
@@ -1858,7 +1859,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_coordination_history",
-      "Coordination history — past coordination alert fires with token, coordination score, KOL count, and timing. ULTRA only.",
+      "Coordination history — past coordination alert fires with token, coordination score, KOL count, and timing. PRO+ (was ULTRA until 2026-09-12).",
       {
         limit: z.number().min(1).max(100).optional().describe("Max entries to return"),
         since: z.string().optional().describe("ISO 8601 — events after this timestamp"),
@@ -2022,7 +2023,7 @@ async function main() {
             { name: "madeonsol_alpha_wallet", description: "Full alpha profile + bot signals for one wallet. ULTRA only." },
             { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
             { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
-            { name: "madeonsol_token_holders", description: "Live holder census + concentration — who holds NOW. Exact holder_count (null only if the provider refuses a mega-cap), labelled owners, pools/curves/burns excluded and named. PRO=10, ULTRA=50, BUSINESS=100 disclosed; 503 holder_scan_in_progress → retry in 20 s." },
+            { name: "madeonsol_token_holders", description: "Live holder census + concentration — who holds NOW. Exact holder_count (null only if the census is not served: provider refusal for a mega-cap, a timeout, or balances above the supply), labelled owners, pools/curves/burns excluded and named. PRO=10, ULTRA=50, BUSINESS=100 disclosed; 503 holder_scan_in_progress → retry in 20 s." },
             { name: "madeonsol_token_locks", description: "Token locks & vesting on a mint (Streamflow / Jupiter Lock / Bonfida) — every contract with live locked/claimable, schedule, cancelable-by-sender, plus 7d/30d unlock summary. LP locks not included. PRO+." },
             { name: "madeonsol_token_locks_feed", description: "Cross-token feed of NEW lock/vesting contracts, newest first; poll with next_since or subscribe to WS channel token:locks. PRO+." },
             { name: "madeonsol_token_unlocks", description: "Upcoming unlock EVENTS (cliff / period / final / tranche) across all active contracts inside 1h–90d — what locked supply hits the market, how much, from whose lock. PRO+." },
