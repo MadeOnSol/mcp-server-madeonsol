@@ -1308,6 +1308,29 @@ function registerTools(server: McpServer) {
     );
 
     server.tool(
+      "madeonsol_deployer_activity",
+      "A wallet's deployer activity as one newest-first timeline: launches (fee_payer_is_creator / external_fee_payer booleans, dev buy), its own dev buys/sells, creator transfers (raw from/to, initiated_by), fee claims, funding in and capital out (raw recipient). The window applies to each EVENT's own time: PRO 30 days, ULTRA 365 days, BUSINESS unbounded; page clamped to 100 / 100 / 500 (echoed in plan). History is online-only for now: read coverage.families.<family>.complete / archive_required_before and plan.history.archive_only before treating an empty range as 'nothing happened'. dev_trades.skipped_reason = no_attributed_launch means the wallet never launched an attributed token. PRO responses carry no identity block and no fee-payer address; ULTRA/BUSINESS identity is not_available until identity stitching is released. Paginate with pagination.next_cursor. PRO+ (BASIC receives HTTP 403).",
+      {
+        wallet: z.string().describe("Wallet address (base58); deployer or not (is_deployer says which)"),
+        limit: z.number().int().min(1).optional().describe("Page size; clamped server-side to 100 (PRO, ULTRA) or 500 (BUSINESS)"),
+        cursor: z.string().optional().describe("pagination.next_cursor from the previous page"),
+        since: z.string().optional().describe("Requested window start, ISO 8601; clamped to the plan window"),
+        types: z.string().optional().describe("Comma list of: launch, dev_buy, dev_sell, creator_transferred, fee_claim, funding_in, capital_out"),
+      },
+      { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      async ({ wallet, limit, cursor, since, types }) => {
+        const qs = new URLSearchParams();
+        if (limit !== undefined) qs.set("limit", String(limit));
+        if (cursor !== undefined) qs.set("cursor", cursor);
+        if (since !== undefined) qs.set("since", since);
+        if (types !== undefined) qs.set("types", types);
+        const query = qs.toString();
+        const path = `/deployer-hunter/${encodeURIComponent(wallet)}/activity${query ? `?${query}` : ""}`;
+        return { content: [{ type: "text" as const, text: await restQuery("GET", path) }] };
+      }
+    );
+
+    server.tool(
       "madeonsol_token_candles",
       "Historical OHLCV price candles for a token, aggregated from the on-chain trade firehose. Each candle carries t/open/high/low/close/volume_usd/trades/market_cap_usd. Timeframes: 1m/5m/15m/1h/4h/1d. PRO=OHLCV, last 30 days only. ULTRA adds buy/sell volume + count splits, net flow, MEV volume, open/close liquidity, high/low MC, and full history. PRO/ULTRA only — BASIC receives HTTP 403.",
       {
