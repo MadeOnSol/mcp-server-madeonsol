@@ -185,7 +185,7 @@ function registerTools(server) {
         return { content: [{ type: "text", text: await query("/api/x402/kol/leaderboard", params) }] };
     });
     server.tool("madeonsol_deployer_alerts", "Get real-time alerts from Pump.fun deployers with KOL buy enrichment. Filters: deployer tier, alert_type, priority, and min_kol_buys to gate out noise. Cursor-paginated via 'before' (preferred over 'offset' at scale).", {
-        limit: z.number().min(1).max(100).default(10).describe("Number of deployer alerts to return (1-100)"),
+        limit: z.number().min(1).max(50).default(10).describe("Number of deployer alerts to return (1-50)"),
         offset: z.number().min(0).default(0).describe("Legacy offset pagination (prefer 'before' for polling)"),
         before: z.string().optional().describe("Cursor — ISO 8601 timestamp; returns alerts strictly older than this. Pass next_before from the previous response."),
         since: z.string().optional().describe("Only alerts after this ISO 8601 timestamp."),
@@ -248,7 +248,7 @@ function registerTools(server) {
     server.tool("madeonsol_deployer_leaderboard", "Pump.fun deployer reputation leaderboard, ranked by bonding rate, recent form, total bonded, or last deploy. Unranked deployers are excluded. IMPORTANT: compare bonding_rate (LIFETIME) against recent_bond_rate (ROLLING) — the gap between them is the signal, not either number alone; a deployer at 0.40 lifetime and 0.05 recent is cooling off. runner_rate (share of labeled tokens that ran rather than dumped) is only meaningful once labeled_tokens >= 3. Requires an msk_ key.", {
         tier: z.enum(["elite", "good", "moderate", "rising", "cold"]).optional().describe("Restrict to one reputation grade"),
         sort: z.enum(["bonding_rate", "recent_bond_rate", "total_bonded", "last_deploy_at", "post_bond_survival_rate"]).default("bonding_rate").describe("Ranking axis"),
-        limit: z.number().min(1).max(100).default(20).describe("Page size (1-100, default 20)"),
+        limit: z.number().min(1).max(50).default(20).describe("Page size (1-50, default 20)"),
         offset: z.number().min(0).default(0).describe("Pagination offset"),
     }, readOnlyAnnotations, async (args) => {
         const params = {};
@@ -264,7 +264,7 @@ function registerTools(server) {
     }));
     server.tool("madeonsol_deployer_tokens", "Every token deployed by one Pump.fun wallet, paginated — each row with deployed_at, bonded_at, time-to-bond and peak market cap. Use only_bonded to see just the graduations. Pair with madeonsol_deployer_profile to check whether a deployer's record comes from a few big winners or a consistent rate. Requires an msk_ key.", {
         wallet: z.string().describe("Deployer wallet address (base58)"),
-        limit: z.number().min(1).max(100).default(50).describe("Page size (1-100, default 50)"),
+        limit: z.number().min(1).max(50).default(50).describe("Page size (1-50, default 50)"),
         offset: z.number().min(0).default(0).describe("Pagination offset"),
         only_bonded: z.boolean().default(false).describe("Return only tokens that graduated"),
     }, readOnlyAnnotations, async ({ wallet, ...rest }) => {
@@ -285,7 +285,7 @@ function registerTools(server) {
     });
     server.tool("madeonsol_deployer_best_tokens", "Best-performing recent tokens launched by RANKED (non-unranked) Pump.fun deployers, by peak market cap multiple over the alert price. Each row carries the deployer wallet and tier alongside mc_at_bond, peak_market_cap and mc_multiplier. Requires an msk_ key.", {
         period: z.string().default("7d").describe("Lookback window, e.g. '24h', '7d', '30d' (default '7d')"),
-        limit: z.number().min(1).max(100).default(5).describe("Rows to return (default 5)"),
+        limit: z.number().min(1).max(20).default(5).describe("Rows to return (1-20, default 5)"),
     }, readOnlyAnnotations, async (args) => {
         const params = {};
         for (const [k, v] of Object.entries(args))
@@ -294,7 +294,7 @@ function registerTools(server) {
         return { content: [{ type: "text", text: await query("/api/v1/deployer-hunter/best-tokens", params) }] };
     });
     server.tool("madeonsol_deployer_recent_bonds", "Tokens from tracked Pump.fun deployers that just graduated to Raydium, newest first, each with time_to_bond_minutes, mc_at_bond, peak market cap and the full deployer reputation block. POLL INCREMENTALLY: pass the previous response's next_since back as `since` to get only what bonded after it — do not re-fetch the whole window. Requires an msk_ key.", {
-        limit: z.number().min(1).max(100).default(20).describe("Page size (1-100, default 20)"),
+        limit: z.number().min(1).max(50).default(20).describe("Page size (1-50, default 20)"),
         since: z.string().optional().describe("Incremental cursor — the previous response's next_since"),
         tier: z.enum(["elite", "good", "moderate", "rising", "cold"]).optional().describe("Restrict to one deployer grade"),
         peak_mc_min: z.number().min(0).optional().describe("Floor on peak market cap (USD)"),
@@ -321,7 +321,7 @@ function registerTools(server) {
     });
     server.tool("madeonsol_kol_token_entry_order", "Ranked KOL first-buyers for a specific token, ordered by entry timestamp. PRO+ adds percentile_pnl_7d per entry.", {
         mint: z.string().describe("Token mint address (base58)"),
-        limit: z.number().min(1).max(200).default(50).describe("Max ranked entries to return"),
+        limit: z.number().min(1).max(100).default(50).describe("Max ranked entries to return (1-100)"),
     }, readOnlyAnnotations, async ({ mint, limit }) => ({
         content: [{ type: "text", text: await query(`/api/x402/kol/tokens/${encodeURIComponent(mint)}/entry-order`, { limit }) }],
     }));
@@ -331,16 +331,13 @@ function registerTools(server) {
         content: [{ type: "text", text: await query("/api/x402/kol/compare", { wallets: wallets.join(",") }) }],
     }));
     server.tool("madeonsol_kol_alerts_recent", "Live KOL alert feed — consensus clusters, fresh-token KOL buys, and heating-up wallets in one unified stream.", {
-        window: z.enum(["5m", "15m", "1h", "6h", "24h"]).default("15m").describe("Lookback window"),
+        window: z.enum(["1h", "6h", "24h"]).default("6h").describe("Lookback window (1h, 6h or 24h; default 6h)"),
         types: z.array(z.enum(["consensus_cluster", "fresh_token_kol_buy", "heating_up"])).optional().describe("Filter to specific alert types"),
-        min_severity: z.enum(["low", "medium", "high"]).optional().describe("Minimum severity to include"),
-        limit: z.number().min(1).max(200).default(50).describe("Max alerts to return"),
-    }, readOnlyAnnotations, async ({ window, types, min_severity, limit }) => {
+        limit: z.number().min(1).max(100).default(30).describe("Max alerts to return (1-100)"),
+    }, readOnlyAnnotations, async ({ window, types, limit }) => {
         const params = { window, limit };
         if (types && types.length > 0)
             params.types = types.join(",");
-        if (min_severity)
-            params.min_severity = min_severity;
         return { content: [{ type: "text", text: await query("/api/x402/kol/alerts/recent", params) }] };
     });
     server.tool("madeonsol_kol_pnl", "Deep per-wallet PnL breakdown — realized PnL, win rate, profit factor, max drawdown, daily equity curve, closed/open positions. BASIC: summary only. PRO: + curve + closed. ULTRA: + open positions.", {
@@ -686,10 +683,9 @@ function registerTools(server) {
             max_mc: z.number().optional().describe("Maximum market cap in USD"),
             min_liq: z.number().optional().describe("Minimum quote-side liquidity in USD (default 2000 — pass 0 to opt out of phantom-MC filter)"),
             active_h: z.number().optional().describe("Only tokens with a trade in the last N hours"),
-            primary_dex: z.enum(["pumpfun", "pumpswap", "raydium", "meteora", "orca", "raydium_clmm"]).optional().describe("Filter by primary DEX"),
+            primary_dex: z.enum(["pumpfun", "pumpswap", "raydium", "meteora", "orca", "raydium_clmm", "launchlab"]).optional().describe("Filter by primary DEX"),
             authority_revoked: z.boolean().optional().describe("Only tokens whose mint+freeze authority is revoked"),
             exclude_token2022: z.boolean().optional().describe("Exclude Token-2022 mints (transfer-fee / hook risk)"),
-            min_lp_burnt_pct: z.number().optional().describe("Minimum % of LP supply burned (0-100)"),
             min_volume_1h_usd: z.number().optional().describe("Minimum trailing 1h volume in USD (post-filter — may shrink page size)"),
             max_mev_share_pct: z.number().optional().describe("Maximum MEV-share % of 1h volume (post-filter)"),
             mc_change_1h_min_pct: z.number().optional().describe("Minimum 1h MC change % (post-filter; negative allowed)"),
