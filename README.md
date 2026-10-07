@@ -1,5 +1,8 @@
 # mcp-server-madeonsol
 
+> **Unreleased ShredPrism migration (PR #420):** sniper becomes ULTRA/BUSINESS/ENTERPRISE API-key only. The keyless sniper route returns HTTP 410 without a new payment. Early observations are not proof of execution. The changes below describe the release candidate; package publication and source activation are still pending. Historical release notes describe earlier behavior.
+
+
 [![npm version](https://img.shields.io/npm/v/mcp-server-madeonsol?style=flat-square)](https://www.npmjs.com/package/mcp-server-madeonsol)
 [![npm downloads](https://img.shields.io/npm/dm/mcp-server-madeonsol?style=flat-square)](https://www.npmjs.com/package/mcp-server-madeonsol)
 [![Smithery](https://img.shields.io/badge/Smithery-listed-blueviolet?style=flat-square)](https://smithery.ai/servers/madeonsol/solana-kol-intelligence)
@@ -14,6 +17,10 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 <!-- Stats below are deliberate conservative floors kept in sync with the site's canonical labels (src/lib/constants.ts KOL_COUNT_LABEL / DEPLOYERS_PROFILED_LABEL / ALPHA_WALLETS_LABEL), rounded down from a live count measured on a known date and bumped only when the real count crosses the next threshold -- never the exact live number, which changes every minute. Do not replace with a live/volatile count. -->
 
 > Real-time Solana trading intelligence: track 2,000+ KOL wallets with <3s latency on paid keys and x402 pay-per-call (free-tier live feeds are 5-min delayed), score 85K+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), verify any wallet's CURRENT on-chain holdings straight from its token accounts, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day across 40+ endpoints (live feeds 5-min delayed) — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
+
+> **Server update 2026-10-05 (no package change needed): realtime developer activity and USDC/USDT trade sizing.** The webhook event `dev:activity` (PRO+) and, on the Ultra DEX firehose socket, `dev_subscribe` → `dev:activity` + `dev:activity_enrichment` (same `id`) now deliver a token developer's `dev_sell`, `dev_buy`, `dev_token_transfer_out` and `dev_token_transfer_in` as they happen (a transfer is never a sell; PRO gets the developer's own events without identity fields; transfer coverage is partial, see `transfer_watch_coverage`). On `dex:trades`, a swap paid in USDC or USDT now carries `sol_amount` = the SOL equivalent of its stable leg (used by `dust`, `min_sol`, `max_sol`) plus the additive fields `sol_amount_basis` (`native_sol` | `stable_quote_equivalent` | `stable_quote_unconverted`) and `stable_quote`; `stable_quote_unconverted` means `sol_amount` 0 (size unknown). Details: [changelog](https://madeonsol.com/changelog).
+
+> **Server update 2026-10-04 (no package change needed): copy-trade rules follow any valid source wallet.** `source_wallets` no longer have to be tracked KOL wallets: any valid Solana wallet fires, KOL membership is optional enrichment, and copy-trade sources do not use Wallet Tracker quota. Each rule reports `source_admission` (`any_wallet`) and `operational_state` (`eligible`, or an infrastructure state `monitoring_pending` / `monitoring_unavailable` / `source_capacity_unavailable`). `source_wallets_tracked` / `source_wallets_untracked` and the `untracked_source_wallets` warning are legacy fields, still filled. This supersedes the "signals fire only for tracked KOL wallets" wording in older notes below. Limits are unchanged: PRO 3 rules × 5 wallets, ULTRA 20 × 50, BUSINESS 100 × 250.
 
 > **New in 3.6.0: deployer activity timeline.** `madeonsol_deployer_activity` binds `GET /deployer-hunter/{wallet}/activity` (PRO+, keyed `msk_` API only): one newest-first timeline of launches, the deployer's own dev buys/sells, creator transfers, fee claims, funding in and capital out, windowed on each event's own time (PRO 30 d, ULTRA 365 d, BUSINESS unbounded; page clamped to 100 / 100 / 500). History is online-only for now: the response says which families are complete and where the archive boundary is. PRO responses carry no identity block and no fee-payer address.
 
@@ -79,6 +86,8 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 >
 > **New in 1.7.0** *(2026-05-12)* — Two new tools: **`madeonsol_me`** (account/quota introspection — read tier, remaining requests, and per-feature usage without parsing rate-limit headers) and **`madeonsol_tokens_list`** (PRO+ filtered, sortable token directory — MC band, liquidity floor, primary DEX, authority/safety flags, plus computed 1h volume / MEV-share / MC-change deltas). Token responses now expose **velocity / MEV-share** fields. Token directory defaults to **`min_liq=2000`** to skip phantom-MC dust — pass `min_liq=0` to opt out. `/token/{mint}` now returns **structured 400 errors** (`code` / `reason` / `example` / `docs`) instead of plain strings. Deprecated `avg_entry_mc_usd` field fully removed from KOL/alpha leaderboards.
 
+> **New in 4.0.0 (breaking):** the sniper tool requires an ULTRA, BUSINESS or ENTERPRISE API key; in keyless (x402) mode it is refused before any payment because the server retired the keyless sniper endpoint on 2026-10-06 (HTTP 410, nothing charged).
+
 ## Install via Smithery (one line)
 
 [Smithery](https://smithery.ai/servers/madeonsol/solana-kol-intelligence) is the easiest path — it writes the config for you and handles the install:
@@ -134,7 +143,7 @@ Building an autonomous agent? Skip the signup. Configure a **funded Solana walle
 How it works:
 
 - The wallet behind `SVM_PRIVATE_KEY` settles each request as a **USDC micropayment on Solana** (~$0.005–$0.02 per call, settled on-chain). No subscription; the configured authorization budget bounds spending.
-- The keyless catalog covers **25 endpoints** — the latest additions: token candles ($0.01), almost-bonded ($0.01), top-traders ($0.02), cap-table ($0.02), sniper recent deploys ($0.01), token flow ($0.01), and deployer trajectory ($0.01).
+- Read `/api/x402` for the current keyless catalog and prices. Sniper is API-key only.
 - The free **`madeonsol_discovery`** tool needs no auth and returns every endpoint with its exact per-call price — call it first to see what each tool costs.
 - Install the x402 peer deps alongside the server (only required for this mode):
 
@@ -258,13 +267,13 @@ The Docker image uses the same loopback restriction and requires both environmen
 | `madeonsol_deployer_trajectory` | Deployer skill curve — streaks, rolling bond rate, trend — available on all tiers |
 | `madeonsol_deployer_history` | A pump.fun deployer's daily reputation time-series (`bonding_rate`, `recent_bond_rate`, `tier`, `avg_peak_mc` per day) — backtest deployer signals at launch time without look-ahead bias. `limit` 1–365 (default 90) |
 
-### Deshred Sniper Alerts *(new in 1.10 — Pro/Ultra)*
+### Early sniper observations (ULTRA/BUSINESS/ENTERPRISE)
 
 Pre-confirm pump.fun deploy feed reconstructed from shred-level (**deshred**) data — launches surface **~500ms before they confirm on-chain**. Pro sees elite/good deployers; Ultra sees every tier.
 
 | Tool | Description |
 |---|---|
-| `madeonsol_sniper_recent` | Newest-first deshred deploy feed. Pro: elite/good · Ultra: all tiers · keyless x402: $0.01 (elite/good). `watchlist: true` (Ultra) narrows to your custom deployer watchlist. **New 1.19:** each deploy carries `footprint` — the slot-window snipe rollup (`buys`, `buyers`, `sol`, `supply_pct`, `sniper_wallet_buys`, `data_available`, `as_of`) or `null` when not yet settled/observable |
+| `madeonsol_sniper_recent` | Early deploy observations for ULTRA/BUSINESS/ENTERPRISE API keys. No x402; no guaranteed lead time. Observations are not proof of execution. |
 | `madeonsol_sniper_by_deployer` | Deshred deploys for a single deployer wallet (Ultra) |
 
 ### Wallet Tracker
@@ -326,7 +335,7 @@ Scored from 1.5M+ early-buyer records (wallets seen in the first 20 buyers of Pu
 
 ### Copy-Trade Rules (PRO+)
 
-Server-side rules that fire signals when a source wallet trades. Delivered via webhook (HMAC-signed) and/or WebSocket. Limits: PRO 3 rules × 5 source wallets, ULTRA 20 × 50, BUSINESS 100 × 250 (Enterprise follows Business). The server enforces your tier's limit. Signals fire only for trades by wallets MadeOnSol tracks as KOLs (the roster at `GET /api/v1/kol/wallets`): a rule accepts any valid Solana address, but an untracked wallet never produces a signal. `only_action` defaults to `buy`. `min_mc_usd` / `max_mc_usd` restrict a rule (or the signals query) to a market-cap band on the source trade; when a bound is set, trades with an unknown market cap are dropped.
+Server-side rules that fire signals when a source wallet trades. Delivered via webhook (HMAC-signed) and/or WebSocket. Limits: PRO 3 rules × 5 source wallets, ULTRA 20 × 50, BUSINESS 100 × 250 (Enterprise follows Business). The server enforces your tier's limit. Any valid Solana wallet can be a source, KOL or not (server behaviour since 2026-10-04; KOL membership is optional enrichment and copy-trade sources do not use Wallet Tracker quota). Each rule reports `source_admission` (`any_wallet`) and `operational_state` (`eligible`, or an infrastructure state: `monitoring_pending`, `monitoring_unavailable`, `source_capacity_unavailable`). A source trade older than 10 s by chain time is not executed, and each trade produces at most one signal per rule. `only_action` defaults to `buy`. `min_mc_usd` / `max_mc_usd` restrict a rule (or the signals query) to a market-cap band on the source trade; when a bound is set, trades with an unknown market cap are dropped.
 
 | Tool | Description |
 |---|---|
@@ -434,4 +443,5 @@ Free tier returns the full REST response shape on 40+ endpoints — real wallets
 ## License
 
 MIT
+
 

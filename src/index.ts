@@ -479,7 +479,7 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_sniper_recent",
-    "Deshred pre-confirm pump.fun deploy feed — new launches surface ~500ms before they confirm on-chain (reconstructed from shred-level data). Each deploy now carries footprint — the slot-window snipe rollup ({ buys, buyers, sol, supply_pct|null, sniper_wallet_buys, data_available, as_of } | null; buys in slots deploy-1..deploy+3). footprint is null for deploys younger than the ~10-min settle window or outside the trade-pipeline write-gate — absent, not zero. PRO (msk_ key) sees elite/good deployers; ULTRA sees every tier; also callable keyless via x402 ($0.01/call, elite/good scope).",
+    "Early deploy instruction observations. Tier: ULTRA. ULTRA/BUSINESS/ENTERPRISE API key required; unavailable via x402. An observation is not proof of successful execution. No guaranteed lead time. Use action identity and separate execution status; footprint can be null.",
     {
       deployer_tier: z.enum(["elite", "good", "moderate", "rising", "cold", "unranked"]).optional().describe("Filter by deployer reputation tier (ULTRA)"),
       min_bond_rate: z.number().min(0).max(1).optional().describe("Minimum deployer lifetime bond rate (0-1)"),
@@ -494,13 +494,17 @@ function registerTools(server: McpServer) {
       if (min_bond_rate != null) params.min_bond_rate = min_bond_rate;
       if (since) params.since = since;
       if (watchlist) params.watchlist = "true";
-      return { content: [{ type: "text" as const, text: await query("/api/x402/sniper/recent", params) }] };
+      if (authMode !== "madeonsol") return { content: [{ type: "text" as const, text: "Sniper requires an ULTRA/BUSINESS/ENTERPRISE MADEONSOL_API_KEY; x402 is unavailable." }], isError: true };
+      const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+      const res = await fetch(`${BASE_URL}/api/v1/sniper/recent?${qs}`, { headers: apiKeyHeaders() });
+      if (!res.ok) { const body = await res.text().catch(() => ""); return { content: [{ type: "text" as const, text: `Error ${res.status}: ${body}` }], isError: true }; }
+      return { content: [{ type: "text" as const, text: JSON.stringify(await res.json(), null, 2) }] };
     }
   );
 
   server.tool(
     "madeonsol_sniper_by_deployer",
-    "Deshred pre-confirm deploys filtered to a single deployer wallet — audit a deployer's recent launches before tracking them. ULTRA only.",
+    "Early deploy observations filtered to one deployer wallet. Tier: ULTRA. BUSINESS and ENTERPRISE are also eligible; execution is initially unknown.",
     {
       wallet: z.string().describe("Deployer wallet address (base58)"),
       limit: z.number().min(1).max(200).default(50).describe("Max results"),
@@ -516,7 +520,7 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_sniper_watchlist_list",
-    "List your custom sniper watchlist (tracked deployer wallets, any tier). PRO+/ULTRA only. Added 2026-09-10.",
+    "List your custom sniper watchlist (tracked deployer wallets, any tier). Tier: ULTRA. BUSINESS and ENTERPRISE are also eligible. Added 2026-09-10.",
     {},
     { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     async () => {
@@ -529,7 +533,7 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_sniper_watchlist_add",
-    "Add one or many deployer wallets to your sniper watchlist — narrows madeonsol_sniper_recent(watchlist:true) to just these. PRO+/ULTRA only. Added 2026-09-10.",
+    "Add one or many deployer wallets to your sniper watchlist — narrows madeonsol_sniper_recent(watchlist:true) to just these. Tier: ULTRA. BUSINESS and ENTERPRISE are also eligible. Added 2026-09-10.",
     {
       wallet: z.string().optional().describe("Single deployer wallet address (base58) — provide this or `wallets`"),
       wallets: z.array(z.string()).optional().describe("Multiple deployer wallet addresses (base58, up to 50) — provide this or `wallet`"),
@@ -550,7 +554,7 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_sniper_watchlist_remove",
-    "Remove a deployer wallet from your sniper watchlist. PRO+/ULTRA only. Added 2026-09-10.",
+    "Remove a deployer wallet from your sniper watchlist. Tier: ULTRA. BUSINESS and ENTERPRISE are also eligible. Added 2026-09-10.",
     {
       wallet: z.string().describe("Deployer wallet address (base58) to remove"),
     },
@@ -565,7 +569,7 @@ function registerTools(server: McpServer) {
 
   server.tool(
     "madeonsol_discovery",
-    "List all available MadeOnSol API endpoints with prices and parameter docs. Free, no auth required. The keyless x402 catalog now covers 25 endpoints — recent additions: token candles ($0.01), almost-bonded ($0.01), top-traders ($0.02), cap-table ($0.02), sniper recent deploys ($0.01), token flow ($0.01), and deployer trajectory ($0.01).",
+    "List all available MadeOnSol API endpoints with prices and parameter docs. Free, no auth required. Read the current keyless x402 catalog for available endpoints and prices. Examples: token candles ($0.01), almost-bonded ($0.01), top-traders ($0.02), cap-table ($0.02), token flow ($0.01), and deployer trajectory ($0.01).",
     {},
     { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     async () => {
@@ -1471,7 +1475,7 @@ function registerTools(server: McpServer) {
     // tier before the server can answer; a smaller tier gets the server's 400.
     const COPYTRADE_SOURCE_WALLETS_MAX = 250;
     const COPYTRADE_SCOPE_NOTE =
-      "source_wallets must be wallets MadeOnSol tracks as KOLs (the roster at GET /api/v1/kol/wallets): any valid Solana address is accepted into a rule, but signals fire only for trades by tracked KOL wallets, so an untracked wallet never produces a signal.";
+      "Which source wallets fire depends on the server's engine, reported on every rule as source_admission: any_wallet = any valid Solana wallet fires (KOL or not; no Wallet Tracker entry or quota needed); kol_only (legacy) = only wallets MadeOnSol tracks as KOLs (GET /api/v1/kol/wallets) fire, other wallets are accepted but never produce a signal. operational_state says whether a rule can fire right now (eligible, or monitoring_pending / monitoring_unavailable / source_capacity_unavailable under any_wallet).";
     const MC_BAND_NOTE =
       "Market-cap band in USD (0 to 1e12, min <= max) on the source trade's market cap at trade time; when a bound is set, trades with an unknown market cap are dropped.";
 
@@ -1489,7 +1493,7 @@ function registerTools(server: McpServer) {
       "madeonsol_copytrade_create",
       `Create a copy-trade rule. Returns webhook_secret ONCE on creation when delivery_mode includes 'webhook' — store it to verify HMAC signatures. Source wallets per rule: PRO 5, ULTRA 50, BUSINESS 250 (Enterprise follows Business); the server enforces your tier's limit. Responses may carry source_wallets_tracked / source_wallets_untracked and warnings[] (code untracked_source_wallets or source_wallet_tracking_unavailable). ${COPYTRADE_SCOPE_NOTE}`,
       {
-        source_wallets: z.array(z.string()).min(1).max(COPYTRADE_SOURCE_WALLETS_MAX).describe("Tracked KOL wallets to mirror (base58). Per-rule limit depends on tier (PRO 5, ULTRA 50, BUSINESS 250); the server rejects more than yours."),
+        source_wallets: z.array(z.string()).min(1).max(COPYTRADE_SOURCE_WALLETS_MAX).describe("Source wallets to mirror (base58). Any valid Solana wallet under source_admission any_wallet (production since 2026-10-04); only tracked KOL wallets fire under the legacy kol_only engine. Per-rule limit depends on tier (PRO 5, ULTRA 50, BUSINESS 250); the server rejects more than yours."),
         sizing_amount: z.number().describe("SOL when sizing_mode is 'fixed'; otherwise a multiplier / fraction of the source size (0.25 = a quarter), never a percent"),
         name: z.string().optional().describe("Optional human label"),
         min_trade_sol: z.number().optional().describe("Minimum source-wallet trade size to fire a signal"),
@@ -1522,7 +1526,7 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_copytrade_update",
-      `Update fields on a copy-trade rule, including is_active toggle. Omit a field to leave it unchanged; pass null to clear an MC bound. If this update sets a webhook_url on a rule that had no signing secret yet (e.g. a websocket-only rule), the response returns webhook_secret ONCE — store it; an existing secret is never re-shown. Responses may carry source_wallets_tracked / source_wallets_untracked and warnings[] (code untracked_source_wallets or source_wallet_tracking_unavailable): tell the user which wallets can never fire. ${COPYTRADE_SCOPE_NOTE}`,
+      `Update fields on a copy-trade rule, including is_active toggle. Omit a field to leave it unchanged; pass null to clear an MC bound. If this update sets a webhook_url on a rule that had no signing secret yet (e.g. a websocket-only rule), the response returns webhook_secret ONCE — store it; an existing secret is never re-shown. Responses may carry source_wallets_tracked / source_wallets_untracked and warnings[] (code untracked_source_wallets or source_wallet_tracking_unavailable): under source_admission kol_only, tell the user which wallets can never fire. ${COPYTRADE_SCOPE_NOTE}`,
       {
         id: z.number().describe("Subscription id"),
         name: z.string().nullable().optional(),
@@ -2134,3 +2138,4 @@ if (process.env.MADEONSOL_MCP_NO_AUTORUN !== "1") {
     process.exitCode = 1;
   });
 }
+
