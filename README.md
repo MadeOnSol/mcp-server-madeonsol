@@ -1,6 +1,33 @@
 # mcp-server-madeonsol
 
-> **Unreleased ShredPrism migration (PR #420):** sniper becomes ULTRA/BUSINESS/ENTERPRISE API-key only. The keyless sniper route returns HTTP 410 without a new payment. Early observations are not proof of execution. The changes below describe the release candidate; package publication and source activation are still pending. Historical release notes describe earlier behavior.
+
+> **Agent Intelligence Gateway (new in 4.1.0, opt-in).** Set
+> `MADEONSOL_AGENT_GATEWAY_ENABLED=on` together with a paid (PRO or higher)
+> `MADEONSOL_API_KEY` to add six research tools fixed to Solana:
+> `discover_opportunities`, `evaluate_token`, `inspect_wallet`,
+> `inspect_deployer`, `evaluate_signal` and `changes_since`. They call
+> `POST /api/v1/agent-gateway/actions` with your key, count against your
+> normal quota and never sign or pay an x402 request. Answers carry
+> per-source `evidence` and an explicit `partial` status when a source is
+> limited. `changes_since` replays seven curated KOL/deployer event families,
+> not every swap. Without the opt-in the tool inventory is unchanged.
+> A hosted endpoint is also available at
+> `https://madeonsol.com/api/agent-gateway/mcp` (Streamable HTTP, `Authorization:
+> Bearer msk_…`); it does not implement MCP OAuth, so OAuth-only connectors
+> cannot use it. MCP is how an agent invokes tools, not a billing plan. See the
+> [Gateway contract](../../docs/agent-gateway.md).
+
+The hosted `/api/agent-gateway/mcp` transport uses per-request
+account keys and custom Authorization headers. It does not implement MCP OAuth;
+do not expose this package's private loopback HTTP adapter as a public service.
+
+
+> **Six-family early-stream expansion (#457, not activated):** the managed `earlyStream()`
+> client, private-list controls and token/wallet helpers are implemented in the
+> `madeonsol-x402` TypeScript SDK. This package does **not** gain that managed client
+> or new MCP/plugin actions from this PR. Existing sniper compatibility is ULTRA+
+> and deploy-only. See the [release-candidate wire contract](https://madeonsol.com/docs/shredprism-stream.md)
+> for raw WebSocket integration; publication/version parity remains a release gate.
 
 
 [![npm version](https://img.shields.io/npm/v/mcp-server-madeonsol?style=flat-square)](https://www.npmjs.com/package/mcp-server-madeonsol)
@@ -18,11 +45,11 @@ MCP server for [MadeOnSol](https://madeonsol.com) Solana KOL intelligence API. U
 
 > Real-time Solana trading intelligence: track 2,000+ KOL wallets with <3s latency on paid keys and x402 pay-per-call (free-tier live feeds are 5-min delayed), score 85K+ Pump.fun deployers, surface deshred deploy signals **~500ms before on-chain confirmation**, detect multi-KOL coordination, surface bundle-cohort holdings (which same-slot wallets still hold a token's supply), verify any wallet's CURRENT on-chain holdings straight from its token accounts, and stream every DEX trade across 9+ programs. Free tier: 200 requests/day across 40+ endpoints (live feeds 5-min delayed) — no signup payment. Get a key at [madeonsol.com/pricing](https://madeonsol.com/pricing).
 
-> **Server update 2026-10-05 (no package change needed): realtime developer activity and USDC/USDT trade sizing.** The webhook event `dev:activity` (PRO+) and, on the Ultra DEX firehose socket, `dev_subscribe` → `dev:activity` + `dev:activity_enrichment` (same `id`) now deliver a token developer's `dev_sell`, `dev_buy`, `dev_token_transfer_out` and `dev_token_transfer_in` as they happen (a transfer is never a sell; PRO gets the developer's own events without identity fields; transfer coverage is partial, see `transfer_watch_coverage`). On `dex:trades`, a swap paid in USDC or USDT now carries `sol_amount` = the SOL equivalent of its stable leg (used by `dust`, `min_sol`, `max_sol`) plus the additive fields `sol_amount_basis` (`native_sol` | `stable_quote_equivalent` | `stable_quote_unconverted`) and `stable_quote`; `stable_quote_unconverted` means `sol_amount` 0 (size unknown). Details: [changelog](https://madeonsol.com/changelog).
+> **Server update 2026-10-05/08 (no package change needed): realtime developer activity and USDC/USDT trade sizing.** The signed webhook event `dev:activity` (PRO+) and the ULTRA+ DEX-socket `dev_subscribe` path deliver `dev_sell`, `dev_buy`, `dev_token_transfer_out` and `dev_token_transfer_in` (a transfer is never a sell). Transfer detection is now the union of the legacy bounded developer-wallet watch and the broad SPL Token/Token-2022 candidate source for attributed creators while live. `transfer_watch_coverage` describes only the legacy watch; `transfer_sources.broad` in the subscribe ack reports broad-source state/gaps. Recovered broad-source rows are REST history only, never retroactive realtime alerts. Missing creator attribution, source gaps and unsupported mixed swap + standalone-transfer cases remain limitations. On `dex:trades`, a swap paid in USDC or USDT now carries `sol_amount` = the SOL equivalent of its stable leg (used by `dust`, `min_sol`, `max_sol`) plus the additive fields `sol_amount_basis` (`native_sol` | `stable_quote_equivalent` | `stable_quote_unconverted`) and `stable_quote`; `stable_quote_unconverted` means `sol_amount` 0 (size unknown). Details: [changelog](https://madeonsol.com/changelog).
 
 > **Server update 2026-10-04 (no package change needed): copy-trade rules follow any valid source wallet.** `source_wallets` no longer have to be tracked KOL wallets: any valid Solana wallet fires, KOL membership is optional enrichment, and copy-trade sources do not use Wallet Tracker quota. Each rule reports `source_admission` (`any_wallet`) and `operational_state` (`eligible`, or an infrastructure state `monitoring_pending` / `monitoring_unavailable` / `source_capacity_unavailable`). `source_wallets_tracked` / `source_wallets_untracked` and the `untracked_source_wallets` warning are legacy fields, still filled. This supersedes the "signals fire only for tracked KOL wallets" wording in older notes below. Limits are unchanged: PRO 3 rules × 5 wallets, ULTRA 20 × 50, BUSINESS 100 × 250.
 
-> **New in 3.6.0: deployer activity timeline.** `madeonsol_deployer_activity` binds `GET /deployer-hunter/{wallet}/activity` (PRO+, keyed `msk_` API only): one newest-first timeline of launches, the deployer's own dev buys/sells, creator transfers, fee claims, funding in and capital out, windowed on each event's own time (PRO 30 d, ULTRA 365 d, BUSINESS unbounded; page clamped to 100 / 100 / 500). History is online-only for now: the response says which families are complete and where the archive boundary is. PRO responses carry no identity block and no fee-payer address.
+> **Deployer activity timeline (expanded 2026-10-08).** `madeonsol_deployer_activity` binds `GET /deployer-hunter/{wallet}/activity` (PRO+, keyed `msk_` API only): one newest-first timeline containing launches, `dev_buy`, `dev_sell`, `dev_token_transfer_out`, `dev_token_transfer_in`, creator transfers, fee claims, funding in and capital out. Persisted realtime rows can include below-floor trades; recovered transfer rows can carry `recovered`, `recovered_at`, `late_classified` and `counterparty_count`. Read the per-family coverage/retention before interpreting an empty range; PRO responses carry no identity block or fee-payer address.
 
 > **New in 3.3.0: token lock provenance.** Tool descriptions: Token lock rows carry `provider` (`identity` verified | compatible | unverified; `lock_url` always null on Solana, never constructed), `explorer` (Solana Explorer links), `price_usd`, `seconds_until_end`, `seconds_until_next_unlock` and, for Bonfida, the tranche `schedule` (server 2026-10-02). Additive only. `madeonsol_token_locks_feed` accepts `cursor` (strict keyset paging).
 
@@ -443,5 +470,6 @@ Free tier returns the full REST response shape on 40+ endpoints — real wallets
 ## License
 
 MIT
+
 
 

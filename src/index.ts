@@ -8,6 +8,7 @@ import { SolanaPaymentBudget, createSolanaPaidFetch, solanaPaymentPolicyFromConf
 import { readPaidResult, withPaidResult, x402PaymentErrorFrom } from "./x402-recovery.js";
 import { VERSION } from "./version.js";
 import { createPrivateHttpServer, readHttpConfig } from "./http-security.js";
+import { registerAgentGatewayTools } from "./agent-gateway.js";
 
 // MCP `initialize` response `instructions` field (ServerOptions.instructions in
 // the SDK) — operational guidance for the calling agent, distinct from the
@@ -128,6 +129,8 @@ async function query(path: string, params?: Record<string, string | number>) {
 }
 
 function registerTools(server: McpServer) {
+  registerAgentGatewayTools(server, { baseUrl: BASE_URL, apiKey: MADEONSOL_API_KEY, chain: "solana",
+    enabled: process.env.MADEONSOL_AGENT_GATEWAY_ENABLED === "on" });
   const readOnlyAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 
   server.tool(
@@ -1313,13 +1316,13 @@ function registerTools(server: McpServer) {
 
     server.tool(
       "madeonsol_deployer_activity",
-      "A wallet's deployer activity as one newest-first timeline: launches (fee_payer_is_creator / external_fee_payer booleans, dev buy), its own dev buys/sells, creator transfers (raw from/to, initiated_by), fee claims, funding in and capital out (raw recipient). The window applies to each EVENT's own time: PRO 30 days, ULTRA 365 days, BUSINESS unbounded; page clamped to 100 / 100 / 500 (echoed in plan). History is online-only for now: read coverage.families.<family>.complete / archive_required_before and plan.history.archive_only before treating an empty range as 'nothing happened'. dev_trades.skipped_reason = no_attributed_launch means the wallet never launched an attributed token. PRO responses carry no identity block and no fee-payer address; ULTRA/BUSINESS identity is not_available until identity stitching is released. Paginate with pagination.next_cursor. PRO+ (BASIC receives HTTP 403).",
+      "A wallet's deployer activity as one newest-first timeline: launches, dev_buy, dev_sell, dev_token_transfer_out, dev_token_transfer_in, creator transfers, fee claims, funding in and capital out. Realtime dev rows come from persisted dev_exit_events; transfer rows can expose counterparty_count / late_classified and recovered gap rows carry recovered:true (never delivered live; time_basis says whether at is chain block time or the original receive time). Read coverage.families.<family>.complete, retention_boundary / archive_required_before and plan.history before treating an empty range as 'nothing happened'. PRO has no linked-wallet identity projection; ULTRA+ may expose proven identity stitching when current. Paginate with pagination.next_cursor. PRO+ (BASIC receives HTTP 403).",
       {
         wallet: z.string().describe("Wallet address (base58); deployer or not (is_deployer says which)"),
         limit: z.number().int().min(1).optional().describe("Page size; clamped server-side to 100 (PRO, ULTRA) or 500 (BUSINESS)"),
         cursor: z.string().optional().describe("pagination.next_cursor from the previous page"),
         since: z.string().optional().describe("Requested window start, ISO 8601; clamped to the plan window"),
-        types: z.string().optional().describe("Comma list of: launch, dev_buy, dev_sell, creator_transferred, fee_claim, funding_in, capital_out"),
+        types: z.string().optional().describe("Comma list of: launch, dev_buy, dev_sell, dev_token_transfer_out, dev_token_transfer_in, creator_transferred, fee_claim, funding_in, capital_out"),
       },
       { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       async ({ wallet, limit, cursor, since, types }) => {
