@@ -5,7 +5,7 @@
   ],
   "display_name": "MadeOnSol — Solana memecoin intelligence",
   "description": "Real-time Solana memecoin trading intelligence — track 2,000+ KOL wallets with sub-second latency on paid keys and x402 (free-tier live feeds are 5-min delayed), score 85,000+ reputation-profiled Pump.fun deployers out of 1.2M+ indexed, surface multi-KOL coordination signals, run server-side copy-trade rules, and stream every DEX trade across 14 programs. Backtested first-touch scout signal (S-tier scouts attract ≥3 follow-on KOLs ~50% of the time vs 14% baseline). Free tier 200 requests per day (live feeds 5-min delayed), no payment to start; auth via msk_ API key or x402 micropayments.",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "homepage": "https://madeonsol.com/solana-api",
   "repository": "https://github.com/madeonsol/mcp-server-madeonsol",
   "license": "MIT",
@@ -239,6 +239,18 @@
     {
       "name": "madeonsol_token_bundle",
       "description": "Bundle-cohort holdings for a token — which same-slot bundle wallets bought it and how much of supply they still hold (held_pct_of_supply)."
+    },
+    {
+      "name": "madeonsol_token_bundles",
+      "description": "Every coordinated buy cluster on a Solana token over time (launch bundle and later clusters), with what each cluster still holds and how much it has sold."
+    },
+    {
+      "name": "madeonsol_token_bundle_share",
+      "description": "One 'bundled now' figure: share of supply held right now by every bundle wallet on a Solana token, read from the chain."
+    },
+    {
+      "name": "madeonsol_kol_token_trades",
+      "description": "Every tracked-KOL trade on one Solana token in one payload, newest first, keyset paged."
     },
     {
       "name": "madeonsol_token_pools",

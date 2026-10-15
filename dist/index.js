@@ -759,24 +759,110 @@ function registerTools(server) {
             content: [{ type: "text", text: await restQuery("GET", `/alpha/${encodeURIComponent(wallet)}/linked`) }],
         }));
         // ── Token quality ──
-        server.tool("madeonsol_token_cap_table", "First non-deployer early buyers for a token, enriched with PnL, KOL identity, and bot flags. PRO=top 10 (truncated wallets), ULTRA=top 20 (full). BASIC: 403.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
-            content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/cap-table`) }],
-        }));
-        server.tool("madeonsol_token_buyer_quality", "0–100 buyer-quality score for a token's first-buyer cohort. 5-min cached. Full breakdown on all tiers, incl. dump_cluster_count (3+ dump-cluster wallets in the first-20 → 94% historical dump rate vs 61% base) and recycled_early_buyer_count.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
-            content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/buyer-quality`) }],
-        }));
+        server.tool("madeonsol_token_cap_table", "First non-deployer early buyers for a token, enriched with PnL, KOL identity, and bot flags. PRO=top 10 (truncated wallets), ULTRA=top 20 (full). BASIC: 403.", {
+            mint: z.string().describe("Token mint address (base58)"),
+            limit: z.number().int().min(1).max(100).optional().describe("Rows (default 20; capped per tier)"),
+            verify_current_balances: z.boolean().optional().describe("ULTRA+: read every buyer's balance from the chain now (balance_now, holding_status, exited_without_sell = never sold but holds 0, i.e. moved out by transfer); strict, a failed read answers 503 instead of a guess"),
+            include_scout_scores: z.boolean().optional().describe("Add each KOL buyer's scout score as of its OWN first buy (point in time, no hindsight)"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint, limit, verify_current_balances, include_scout_scores }) => {
+            const qs = new URLSearchParams();
+            if (limit !== undefined)
+                qs.set("limit", String(limit));
+            if (verify_current_balances)
+                qs.set("verify_current_balances", "true");
+            if (include_scout_scores)
+                qs.set("include_scout_scores", "true");
+            const query = qs.toString();
+            const path = `/tokens/${encodeURIComponent(mint)}/cap-table${query ? `?${query}` : ""}`;
+            return { content: [{ type: "text", text: await restQuery("GET", path) }] };
+        });
+        server.tool("madeonsol_token_buyer_quality", "0–100 buyer-quality score for a token's first-buyer cohort. 5-min cached. Full breakdown on all tiers, incl. dump_cluster_count (3+ dump-cluster wallets in the first-20 → 94% historical dump rate vs 61% base) and recycled_early_buyer_count.", {
+            mint: z.string().describe("Token mint address (base58)"),
+            include_balances: z.boolean().optional().describe("PRO+: add dump_cluster_held_now — what the dump-cluster wallets counted in dump_cluster_count hold now, read from the chain; totals only when every wallet was read"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint, include_balances }) => {
+            const query = include_balances ? "include_balances=true" : "";
+            const path = `/tokens/${encodeURIComponent(mint)}/buyer-quality${query ? `?${query}` : ""}`;
+            return { content: [{ type: "text", text: await restQuery("GET", path) }] };
+        });
         server.tool("madeonsol_token_risk", "Transparent 0–100 token risk score (higher = riskier): risk evidence for your own policy, not a verdict. Returns a band (enum values 'safe'/'caution'/'danger' label score ranges; they are not a safety guarantee), an explainable factors[] array (mint authority, freeze authority, liquidity, transfer fee, token-2022, burn, launch cohort, deployer bond rate, KOL signal, blacklist) each with status/points/detail, and the raw inputs that produced the score. inputs now includes sniper_footprint — the slot-window launch-snipe rollup ({ buys, buyers, sol, supply_pct|null, sniper_wallet_buys, data_available, as_of } | null; buys landing in slots deploy-1..deploy+3). data_available=false means the mint isn't observable in the trade pipeline — NOT zero snipes; null means no rollup yet. Also returns a top-level dev block (deployer self-activity, null when the mint has no deployer-pipeline row): wallet, launchpad, deployed_at, create-tx self-buy snapshot (buy_sol / buy_tokens / buy_supply_pct), post-create rollup (bought_tokens_after — catches the same-second-separate-tx dev buy — sold_tokens, sold_sol, first_sell_at, last_sell_at), LIVE on-chain holdings (holdings_tokens, holdings_supply_pct — pump.fun 1B denominator, null elsewhere — wallet_empty: is the dev wallet empty NOW), and transfer_status (suspected / none_detected / unknown; transferred_out is its deprecated boolean view). score_version v2 (2026-09-21): the LP factor is 'unknown' unless LP custody is verified — a token-supply burn (token_supply_burn_detected, alias burn_detected) is never LP evidence; assessment.unknown_inputs lists inputs that could not be observed (the band is then never 'safe') and assessment.not_assessed lists dimensions not measured for this token. A failed score-critical read returns HTTP 503 code risk_inputs_unavailable (retry) instead of a score. PRO/ULTRA only — BASIC receives HTTP 403.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
             content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/risk`) }],
         }));
-        server.tool("madeonsol_token_bundle", "Bundle-cohort holdings for a token — which same-slot bundle wallets bought it and how much of supply they still hold (held_pct_of_supply). Rug/insider signal. Returns a `bundle` block (wallet_count, bundle_kind atomic_tx/same_slot/none, held_ratio, held_pct_of_supply [the headline — net held / circulating supply, null if unknown], fully_exited, buy_volume, tokens_held) plus a `wallets[]` array (rank, wallet, held_ratio, has_sold, atomic, is_kol). BASIC get the bundle block only (empty wallets[]); PRO adds top-10 flags-only wallets; ULTRA returns the full cohort with enriched identities (kol_name, win_rate, bot_confidence, tokens_held).", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
-            content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/bundle`) }],
-        }));
+        server.tool("madeonsol_token_bundle", "Bundle-cohort holdings for a token — which same-slot bundle wallets bought it and how much of supply they still hold (held_pct_of_supply). Rug/insider signal. Returns a `bundle` block (wallet_count, bundle_kind atomic_tx/same_slot/none, held_ratio, held_pct_of_supply [the headline — net held / circulating supply, null if unknown], fully_exited, buy_volume, tokens_held) plus a `wallets[]` array (rank, wallet, held_ratio, has_sold, atomic, is_kol). BASIC get the bundle block only (empty wallets[]); PRO adds top-10 flags-only wallets; ULTRA returns the full cohort with enriched identities (kol_name, win_rate, bot_confidence, tokens_held).", {
+            mint: z.string().describe("Token mint address (base58)"),
+            include_balances: z.boolean().optional().describe("PRO+: add held_now (current balances from the chain for every cohort wallet, Kaldera first) + wallets[].balance_now; totals only when every wallet was read, a failed read is never 0"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint, include_balances }) => {
+            const query = include_balances ? "include_balances=true" : "";
+            const path = `/tokens/${encodeURIComponent(mint)}/bundle${query ? `?${query}` : ""}`;
+            return { content: [{ type: "text", text: await restQuery("GET", path) }] };
+        });
+        server.tool("madeonsol_token_bundles", "Every coordinated buy cluster on a Solana token in a window, the launch bundle AND groups that buy together later (madeonsol_token_bundle only scores the first-20 cohort). A cluster = one slot where >= min_wallets distinct wallets bought. Per cluster: slot, at, minutes_after_launch + phase (launch = within 5 min of first sighting, else later), wallet_count, new_wallets (no earlier stored buy of the token), atomic_txs (transactions carrying 3+ of them = definitively coordinated), sol_volume, token_volume, wallets (<= 50) and exit (what those wallets have SOLD since, from the live bundle tracker: wallets sold / exited, sold_pct, realized_sol; null when the cluster is not followed). summary.baseline = buys per active slot (on busy tokens unrelated buyers share slots): evidence, not a verdict. Only STORED buys count (persistence floor 0.05 SOL / $3.50 stable leg; rows before 2026-06-17 have no slot). include_balances adds held_now for the 3 most recent clusters. 503 bundle_clusters_unavailable until the server function exists. PRO+.", {
+            mint: z.string().describe("Token mint address (base58)"),
+            window: z.enum(["1h", "6h", "24h"]).optional().describe("Lookback window (default 24h)"),
+            min_wallets: z.number().int().min(3).max(20).optional().describe("Minimum distinct buyers in one slot (default 3)"),
+            limit: z.number().int().min(1).max(100).optional().describe("Clusters returned, newest first (default 50)"),
+            include_balances: z.boolean().optional().describe("Add held_now (chain balances) to the 3 most recent clusters"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint, window, min_wallets, limit, include_balances }) => {
+            const qs = new URLSearchParams();
+            if (window !== undefined)
+                qs.set("window", window);
+            if (min_wallets !== undefined)
+                qs.set("min_wallets", String(min_wallets));
+            if (limit !== undefined)
+                qs.set("limit", String(limit));
+            if (include_balances)
+                qs.set("include_balances", "true");
+            const query = qs.toString();
+            const path = `/tokens/${encodeURIComponent(mint)}/bundles${query ? `?${query}` : ""}`;
+            return { content: [{ type: "text", text: await restQuery("GET", path) }] };
+        });
+        server.tool("madeonsol_token_bundle_share", "One 'bundled now' figure for a Solana token: bundled_pct_of_supply_now = share of supply held RIGHT NOW by every bundle wallet (the launch bundle UNION every coordinated cluster in the window, each wallet counted once), read from the chain. Null (with held_now.incomplete_reason) unless every wallet was read: never a partial sum. scope says launch_and_clusters or launch_cohort_only (clusters unavailable). Cached 30 s per (mint, window, min_wallets). Pair with the WS channel token:bundles to re-read on every new cluster or exit. PRO+.", {
+            mint: z.string().describe("Token mint address (base58)"),
+            window: z.enum(["1h", "6h", "24h"]).optional().describe("Cluster window (default 24h)"),
+            min_wallets: z.number().int().min(3).max(20).optional().describe("Minimum distinct buyers per cluster (default 3)"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint, window, min_wallets }) => {
+            const qs = new URLSearchParams();
+            if (window !== undefined)
+                qs.set("window", window);
+            if (min_wallets !== undefined)
+                qs.set("min_wallets", String(min_wallets));
+            const query = qs.toString();
+            const path = `/tokens/${encodeURIComponent(mint)}/bundle-share${query ? `?${query}` : ""}`;
+            return { content: [{ type: "text", text: await restQuery("GET", path) }] };
+        });
+        server.tool("madeonsol_kol_token_trades", "Every stored tracked-KOL trade on one Solana token in one payload, newest first (keyset paged with next_cursor + exact has_more): kol_name, wallet, action, sol_amount, token_amount, price and market cap at the trade, tx_signature, traded_at. Filters action, kol (wallet), since (ISO). Only stored trades count (persistence floor 0.05 SOL / $3.50, stated in note). BASIC: 5-min delayed, 20 rows; PRO+ real time.", {
+            mint: z.string().describe("Token mint address (base58)"),
+            limit: z.number().int().min(1).max(200).optional().describe("Rows (default 100)"),
+            action: z.enum(["buy", "sell"]).optional().describe("Only buys or only sells"),
+            kol: z.string().optional().describe("Only this KOL wallet"),
+            since: z.string().optional().describe("ISO timestamp lower bound"),
+            cursor: z.string().optional().describe("next_cursor from the previous page"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint, limit, action, kol, since, cursor }) => {
+            const qs = new URLSearchParams();
+            if (limit !== undefined)
+                qs.set("limit", String(limit));
+            if (action !== undefined)
+                qs.set("action", action);
+            if (kol !== undefined)
+                qs.set("kol", kol);
+            if (since !== undefined)
+                qs.set("since", since);
+            if (cursor !== undefined)
+                qs.set("cursor", cursor);
+            const query = qs.toString();
+            const path = `/kol/tokens/${encodeURIComponent(mint)}/trades${query ? `?${query}` : ""}`;
+            return { content: [{ type: "text", text: await restQuery("GET", path) }] };
+        });
         server.tool("madeonsol_token_pools", "Per-venue liquidity map for a Solana token — every DEX pool it trades in (pump.fun/PumpSwap/Raydium/Meteora/Orca) with per-pool liquidity, live vs parked (is_active), plus a summary (total liquidity, pool/DEX counts, primary/deepest pool, top_pool_share_pct concentration). Shows WHERE liquidity sits and how fragmented it is, vs the single aggregate number from the token endpoint.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
             content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/pools`) }],
         }));
-        server.tool("madeonsol_token_holders", "Live holder census + concentration for a Solana token — WHO HOLDS NOW (madeonsol_token_cap_table is who bought first). Read live from the ledger at confirmed: every token account of the mint (mint-scoped getProgramAccounts), merged per owner, ranks 1–100 retained. concentration.holder_count is EXACT — distinct non-zero owners minus the excluded pools/curves/burns — and is null ONLY when the census is not served (provider refusal for a TRUMP/JUP/BONK-class mega-cap, a timeout, or balances adding up to more than the mint supply): then source.method=getTokenLargestAccounts, source.census_fallback_reason is set and only the top-20 view is served; it is NEVER estimated from trades. Every disclosed owner carries labels[] from MadeOnSol wallet intelligence — deployer / kol / early_buyer / buyer / bundle / bot / dump_cluster (+ kol_name, early_buyer_rank, bot_confidence, historical_win_rate); an EMPTY labels[] means unknown to us, NOT verified clean. Liquidity pools, bonding curves, vaults and burn addresses are EXCLUDED from the circulating denominator and NAMED in excluded[] with reason = pool (dex + pool_address set) | bonding_curve (pump.fun/LaunchLab) | burn | program_account (off-curve owner we could not attribute); concentration splits them into pool_pct / burned_pct / program_pct (over TOTAL supply), while top1/top10/top20/top50/top100_share and deployer/kol/early_buyer/bundle/bot/dump_cluster_pct are over circulating (supply minus excluded). amount_raw / supply_raw / circulating_raw are raw u64 returned as decimal STRINGS — never coerce to a float. Disclosure is tier-gated: PRO ranks 1–10, ULTRA 1–50, BUSINESS 1–100 (the maths is tier-independent). Large established tokens take 5–30 s to enumerate upstream: the first call may return HTTP 503 with error_kind=holder_scan_in_progress and retry_after_seconds=20 — the scan keeps running and is cached, so retry after ~20 s and the answer is instant. 404 not_a_mint = not a mint on-chain; 503 holder_rpc_unavailable (retry 15 s) = we fail closed rather than guess. PRO+ — BASIC receives HTTP 403.", { mint: z.string().describe("Token mint address (base58)") }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint }) => ({
-            content: [{ type: "text", text: await restQuery("GET", `/tokens/${encodeURIComponent(mint)}/holders`) }],
-        }));
+        server.tool("madeonsol_token_holders", "Live holder census + concentration for a Solana token — WHO HOLDS NOW (madeonsol_token_cap_table is who bought first). Read live from the ledger at confirmed: every token account of the mint (mint-scoped getProgramAccounts), merged per owner, ranks 1–100 retained. concentration.holder_count is EXACT — distinct non-zero owners minus the excluded pools/curves/burns — and is null ONLY when the census is not served (provider refusal for a TRUMP/JUP/BONK-class mega-cap, a timeout, or balances adding up to more than the mint supply): then source.method=getTokenLargestAccounts, source.census_fallback_reason is set and only the top-20 view is served; it is NEVER estimated from trades. Every disclosed owner carries labels[] from MadeOnSol wallet intelligence — deployer / kol / early_buyer / buyer / bundle / bot / dump_cluster (+ kol_name, early_buyer_rank, bot_confidence, historical_win_rate); an EMPTY labels[] means unknown to us, NOT verified clean. Liquidity pools, bonding curves, vaults and burn addresses are EXCLUDED from the circulating denominator and NAMED in excluded[] with reason = pool (dex + pool_address set) | bonding_curve (pump.fun/LaunchLab) | burn | program_account (off-curve owner we could not attribute); concentration splits them into pool_pct / burned_pct / program_pct (over TOTAL supply), while top1/top10/top20/top50/top100_share and deployer/kol/early_buyer/bundle/bot/dump_cluster_pct are over circulating (supply minus excluded). amount_raw / supply_raw / circulating_raw are raw u64 returned as decimal STRINGS — never coerce to a float. Disclosure is tier-gated: PRO ranks 1–10, ULTRA 1–50, BUSINESS 1–100 (the maths is tier-independent). Large established tokens take 5–30 s to enumerate upstream: the first call may return HTTP 503 with error_kind=holder_scan_in_progress and retry_after_seconds=20 — the scan keeps running and is cached, so retry after ~20 s and the answer is instant. 404 not_a_mint = not a mint on-chain; 503 holder_rpc_unavailable (retry 15 s) = we fail closed rather than guess. PRO+ — BASIC receives HTTP 403.", {
+            mint: z.string().describe("Token mint address (base58)"),
+            include_wallet_flags: z.boolean().optional().describe("Add holders[].wallet_flags (bot / bundler / dumper / KOL / deployer reputation) + wallet_flags_meta"),
+        }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }, async ({ mint, include_wallet_flags }) => {
+            const query = include_wallet_flags ? "include_wallet_flags=true" : "";
+            const path = `/tokens/${encodeURIComponent(mint)}/holders${query ? `?${query}` : ""}`;
+            return { content: [{ type: "text", text: await restQuery("GET", path) }] };
+        });
         server.tool("madeonsol_token_locks", "Token locks & vesting on ONE Solana mint — every on-chain lock / vesting contract from Streamflow, Jupiter Lock and Bonfida token-vesting, decoded from the locker programs' account state, plus a summary. Answers 'did the team lock, how much, until when, and can they pull it'. Each contract row: lock_account, program (streamflow | jupiter_lock | bonfida_vesting), kind (lock = whole amount at one date | vesting = cliff and/or periodic release), status (active | completed | cancelled | closed — derived at request time), sender (the locker; null for Bonfida), recipient, name, the schedule (start_at / cliff_at / end_at, period_seconds, continuous = per-second stream, amount_per_period_*, cliff_amount_*, perpetual), the terms (cancelable_by_sender — the locker can cancel, so funds are locked against the RECIPIENT not the locker; cancelable_by_recipient, transferable, can_topup) and a LIVE-derived view: locked_* (still locked right now), unlocked_*, withdrawn_* (claimed), claimable_* (unlocked but not withdrawn), next_unlock {at, kind cliff|period|final|tranche, amount}. summary: lock_count (exact), complete (false when the mint has >5000 contracts — totals then cover the newest 5000, rows_considered), active_count, by_program, by_kind, distinct_lockers, locked / deposited totals, unlocking_7d_* and unlocking_30d_* forward schedule, the nearest next_unlock across all contracts, active_cancelable_by_sender. Every *_raw amount is a base-unit digit STRING — never coerce to a float; ui (locked, amount…), *_usd and *_pct_of_supply are null when decimals / price are unknown (see token.facts_resolved). status/program filter the list only — the summary always covers all rows. LP LOCKS ARE NOT INCLUDED (this is token/vesting locks; LP locks are a separate feature). PROVENANCE (2026-10-02): every row has provider {id, name, identity verified|compatible|unverified, compatible_with, website_url, lock_url} (Streamflow / Jupiter Lock / Bonfida are identified by program id = verified; lock_url is always null on Solana, no per-lock URL format is proven, never construct one), explorer {lock_account_url, creation_tx_url} (Solana Explorer, cite these as evidence), price_usd (the price behind every *_usd), seconds_until_end (0 once completed, null when perpetual or cancelled/closed) and seconds_until_next_unlock. Claims / cancels / closes / unlocks are pushed on WS token:locks only with filters.lifecycle:true; otherwise poll. PRO+ — BASIC receives HTTP 403.", {
             mint: z.string().describe("Token mint address (base58)"),
             status: z.enum(["active", "completed", "cancelled", "closed"]).optional().describe("Filter the list by derived status (summary always covers all rows)"),
@@ -1407,7 +1493,10 @@ async function main() {
                         { name: "madeonsol_alpha_leaderboard", description: "Top profitable early-buyer wallets — 25,000+ scored. BASIC=25, PRO=100, ULTRA=500." },
                         { name: "madeonsol_alpha_wallet", description: "Full alpha profile + bot signals for one wallet. ULTRA only." },
                         { name: "madeonsol_alpha_linked", description: "Behaviorally linked wallets (co-bought 3+ tokens within 2s). ULTRA only." },
-                        { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20." },
+                        { name: "madeonsol_token_cap_table", description: "First non-deployer early buyers for a token, enriched. PRO=10, ULTRA=20. Opt-ins: verify_current_balances (ULTRA), include_scout_scores." },
+                        { name: "madeonsol_token_bundles", description: "Every coordinated buy cluster on a token, launch AND later, with new wallets, sells since (exit) and optional held_now. PRO+." },
+                        { name: "madeonsol_token_bundle_share", description: "Share of supply all bundle wallets hold right now (chain balances), null unless every wallet was read. PRO+." },
+                        { name: "madeonsol_kol_token_trades", description: "Every stored KOL trade on one token in one payload, keyset paged. BASIC delayed, PRO+ live." },
                         { name: "madeonsol_token_holders", description: "Live holder census + concentration — who holds NOW. Exact holder_count (null only if the census is not served: provider refusal for a mega-cap, a timeout, or balances above the supply), labelled owners, pools/curves/burns excluded and named. PRO=10, ULTRA=50, BUSINESS=100 disclosed; 503 holder_scan_in_progress → retry in 20 s." },
                         { name: "madeonsol_token_locks", description: "Token locks & vesting on a mint (Streamflow / Jupiter Lock / Bonfida) — every contract with live locked/claimable, schedule, cancelable-by-sender, plus 7d/30d unlock summary. LP locks not included. PRO+." },
                         { name: "madeonsol_token_locks_feed", description: "Cross-token feed of NEW lock/vesting contracts, newest first; poll with next_since or subscribe to WS channel token:locks. PRO+." },
